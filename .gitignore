@@ -1,0 +1,7 @@
+# 仓库卫生：运行期产物不进 git
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.tmp
+*.log

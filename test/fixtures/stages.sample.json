@@ -1,0 +1,109 @@
+[
+  {
+    "stageId": "main_00-01",
+    "code": "0-1",
+    "apCost": 6,
+    "dropInfos": [{ "itemId": "30011" }]
+  },
+  {
+    "stageId": "main_04-04",
+    "code": "4-4",
+    "apCost": 18,
+    "dropInfos": [{ "itemId": "30012" }, { "itemId": "30011" }]
+  },
+  {
+    "stageId": "main_05-03",
+    "code": "5-3",
+    "apCost": 15,
+    "dropInfos": [{ "itemId": "30013" }]
+  },
+  {
+    "stageId": "main_05-09",
+    "code": "5-9",
+    "apCost": 18,
+    "dropInfos": []
+  },
+  {
+    "stageId": "easy_05-09",
+    "code": "5-9",
+    "apCost": 18,
+    "dropInfos": []
+  },
+  {
+    "stageId": "main_05-10",
+    "code": "5-10",
+    "apCost": 18,
+    "dropInfos": [{ "itemId": "30012" }, { "itemId": "30011" }, { "itemId": "30061" }, { "itemId": "30099" }]
+  },
+  {
+    "stageId": "tough_05-10",
+    "code": "5-10",
+    "apCost": 18,
+    "dropInfos": [{ "itemId": "30012" }]
+  },
+  {
+    "stageId": "main_05-11",
+    "code": "5-11",
+    "apCost": 18,
+    "dropInfos": []
+  },
+  {
+    "stageId": "tough_10-09",
+    "code": "10-09",
+    "apCost": 18,
+    "dropInfos": []
+  },
+  {
+    "stageId": "main_10-09",
+    "code": "10-09",
+    "apCost": 18,
+    "dropInfos": [{ "itemId": "30012" }]
+  },
+  {
+    "stageId": "tough_17-17",
+    "code": "17-17",
+    "apCost": 21,
+    "dropInfos": []
+  },
+  {
+    "stageId": "main_17-17",
+    "code": "17-17",
+    "apCost": 21,
+    "dropInfos": []
+  },
+  {
+    "stageId": "main_05-12",
+    "code": "5-12",
+    "apCost": null,
+    "dropInfos": []
+  },
+  {
+    "stageId": "CE-1",
+    "code": "CE-1",
+    "apCost": 10,
+    "dropInfos": [{ "itemId": "30011" }]
+  },
+  {
+    "stageId": "CE-2",
+    "code": "CE-2",
+    "apCost": 15,
+    "dropInfos": [{ "itemId": "30012" }]
+  },
+  {
+    "stageId": "wk_melee_01",
+    "code": "wk_melee_01",
+    "apCost": 10,
+    "dropInfos": []
+  },
+  {
+    "code": "BROKEN",
+    "apCost": 1,
+    "dropInfos": []
+  },
+  {
+    "stageId": "bad_02",
+    "code": "BAD-2",
+    "apCost": 5,
+    "dropInfos": "not-an-array"
+  }
+]

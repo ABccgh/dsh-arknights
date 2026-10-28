@@ -1,0 +1,56 @@
+{
+  "status_code": 200,
+  "message": "ok",
+  "data": {
+    "total": 5,
+    "page": 1,
+    "limit": 20,
+    "data": [
+      {
+        "id": 104178,
+        "uploader": "博士",
+        "rating_level": 4,
+        "hot_score": 920,
+        "views": 12345,
+        "available": true,
+        "content": "{\"stage_name\":\"main_05-10\",\"opers\":[{\"name\":\"德克萨斯\"},{\"name\":\"能天使\"}],\"doc\":{\"title\":\"5-10 两人\",\"details\":\"两人打法\"}}"
+      },
+      {
+        "id": 104179,
+        "uploader": "A",
+        "rating_level": 4,
+        "hot_score": 800,
+        "views": 9999,
+        "available": true,
+        "content": "{\"stage_name\":\"tough_05-10\",\"opers\":[{\"name\":\"德克萨斯\"}],\"doc\":{\"title\":\"5-10 磨难\",\"details\":\"需要好友助战\"}}"
+      },
+      {
+        "id": 104180,
+        "uploader": "B",
+        "rating_level": 2,
+        "hot_score": 100,
+        "views": 100,
+        "available": false,
+        "content": "{\"stage_name\":\"main_05-10\",\"opers\":[],\"doc\":{\"title\":\"已下架\",\"details\":\"\"}}"
+      },
+      {
+        "id": 104181,
+        "uploader": "C",
+        "rating_level": 3,
+        "hot_score": 500,
+        "views": 500,
+        "available": true,
+        "content": "not-a-json-payload"
+      },
+      {
+        "id": 104182,
+        "uploader": "D",
+        "rating_level": 1,
+        "hot_score": 10,
+        "views": 10,
+        "available": true,
+        "content": "{\"stage_name\":\"main_05-10\",\"opers\":[{\"name\":\"A\"},{\"name\":\"B\"},{\"name\":\"C\"}],\"doc\":{\"title\":\"三人\",\"details\":\"\"}}"
+      }
+    ]
+  }
+}

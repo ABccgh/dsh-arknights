@@ -1,0 +1,54 @@
+{
+  "meta": {
+    "title": "明日方舟 · 打关卡",
+    "description": "用本机 MAA + MuMu 模拟器打《明日方舟》：指定关卡就打那关（能代理走代理，不能代理抄作业）、按主线顺序推关、跑集成战略，并带状态面板与关卡账本；另含「明日方舟」智能体预设用的 7 个查询/排查工具。"
+  },
+  "panel": {
+    "title": "明日方舟",
+    "subtitle": "打关卡 · 推关 · 肉鸽",
+    "status": "状态",
+    "emulator": "模拟器",
+    "connection": "连接",
+    "task": "任务",
+    "ledger": "关卡账本",
+    "events": "最近事件",
+    "offline": "状态不可用（Host 未响应）",
+    "loading": "读取中…"
+  },
+  "labels": {
+    "stage": "关卡",
+    "stagesHint": "例如 5-10 或 5-10,6-5",
+    "times": "次数",
+    "from": "起点",
+    "chapter": "章节",
+    "theme": "主题",
+    "mode": "模式",
+    "fullStar": "满星",
+    "missing": "未满星",
+    "prime": "已领源石",
+    "running": "进行中",
+    "idle": "空闲",
+    "connected": "已连接",
+    "disconnected": "未连接",
+    "emulatorRunning": "运行中",
+    "emulatorStopped": "未启动",
+    "adbOnline": "adb 在线",
+    "adbOffline": "adb 离线"
+  },
+  "actions": {
+    "preview": "预览",
+    "fight": "打关卡",
+    "push": "推关",
+    "rogue": "肉鸽",
+    "stop": "停止",
+    "refresh": "刷新",
+    "confirm": "确认执行",
+    "cancel": "取消"
+  },
+  "hints": {
+    "confirmNeeded": "先预览，再点「确认执行」才会真正开打",
+    "noStage": "请先填写关卡代码",
+    "stopped": "已发送停止指令",
+    "actionFailed": "操作失败"
+  }
+}

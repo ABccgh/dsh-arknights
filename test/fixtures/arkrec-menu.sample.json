@@ -1,0 +1,40 @@
+{
+  "childNodes": [
+    {
+      "story": "主线关卡",
+      "childNodes": [
+        {
+          "episode": "第5章 长夜终尽",
+          "childNodes": [
+            { "operation": "5-10", "cn_name": "长夜终尽", "en_name": "5-10", "challenge": "" },
+            { "operation": "5-11", "cn_name": "别离", "en_name": "", "challenge": "不能使用重装" }
+          ]
+        },
+        {
+          "episode": "第10章 破碎日冕",
+          "childNodes": [
+            { "operation": "10-09", "cn_name": "暴风眼", "challenge": "" }
+          ]
+        }
+      ]
+    },
+    {
+      "story": "活动关卡",
+      "childNodes": [
+        {
+          "name": "孤星",
+          "episode": "CW",
+          "childNodes": [
+            { "operation": "CW-1", "cn_name": "孤星", "en_name": "CW-1" }
+          ]
+        },
+        {
+          "name": "愚人号",
+          "childNodes": [
+            { "operation": "5-10", "cn_name": "重复的关卡名（应忽略）" }
+          ]
+        }
+      ]
+    }
+  ]
+}

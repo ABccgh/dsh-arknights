@@ -1,0 +1,54 @@
+{
+  "meta": {
+    "title": "Arknights · Stage Runner",
+    "description": "Play Arknights through the local MAA core and MuMu emulator: fight exactly the stage you name (auto-deploy when available, otherwise a community copilot solution), push through main-story stages, and run Integrated Strategies, with a status panel and a stage ledger."
+  },
+  "panel": {
+    "title": "Arknights",
+    "subtitle": "Stage · Push · Roguelike",
+    "status": "Status",
+    "emulator": "Emulator",
+    "connection": "Connection",
+    "task": "Task",
+    "ledger": "Stage ledger",
+    "events": "Recent events",
+    "offline": "Status unavailable (host not responding)",
+    "loading": "Loading…"
+  },
+  "labels": {
+    "stage": "Stage",
+    "stagesHint": "e.g. 5-10 or 5-10,6-5",
+    "times": "Runs",
+    "from": "From",
+    "chapter": "Chapter",
+    "theme": "Theme",
+    "mode": "Mode",
+    "fullStar": "Full star",
+    "missing": "Not full star",
+    "prime": "Prime claimed",
+    "running": "Running",
+    "idle": "Idle",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "emulatorRunning": "Running",
+    "emulatorStopped": "Stopped",
+    "adbOnline": "adb online",
+    "adbOffline": "adb offline"
+  },
+  "actions": {
+    "preview": "Preview",
+    "fight": "Fight",
+    "push": "Push",
+    "rogue": "Roguelike",
+    "stop": "Stop",
+    "refresh": "Refresh",
+    "confirm": "Run",
+    "cancel": "Cancel"
+  },
+  "hints": {
+    "confirmNeeded": "Preview first; press Run to actually start",
+    "noStage": "Enter a stage code first",
+    "stopped": "Stop sent",
+    "actionFailed": "Action failed"
+  }
+}

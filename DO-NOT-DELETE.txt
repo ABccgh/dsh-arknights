@@ -1,0 +1,36 @@
+THIS DIRECTORY IS THE LIVE INSTALL TARGET OF A DSH PROFILE BUNDLE.
+DO NOT DELETE, MOVE, OR RENAME IT.
+
+profile : %DSH_HOME%\profiles\desktop
+junction: %DSH_HOME%\profiles\desktop\node_modules\@local\arknights
+bundle  : @local/arknights  (明日方舟打关卡：5 个全局 ark_* 工具 + 侧栏面板 + /ark 命令 + 2 个 HTTP 路由)
+          还导出预设作用域入口 lib/preset/（7 个辅助工具），被另一个 bundle
+          @local/arknights-agent（「明日方舟」智能体预设）用
+          file:///C:/Users/11210/dsh-bundles/arknights/lib/preset/index.js?v=2 引用 ——
+          删掉/挪走本目录会同时让「明日方舟」预设显示「加载失败」。
+
+Deleting or moving this directory removes every ark_* tool, the 明日方舟 panel, the
+/ark command and the preset entry until the bundle is reinstalled with:
+
+    plugin_manager  action: install_bundle  target: %USERPROFILE%\dsh-bundles\arknights
+
+---
+
+This file lives in the repository on purpose: the sync command below uses /MIR,
+which deletes any destination file that is not in the source. Keeping the marker
+in the source is what stops the sync from deleting it.
+
+编辑代码时改仓库，再同步过来：
+
+    robocopy "<仓库路径>" "%USERPROFILE%\dsh-bundles\arknights" /MIR /XD .git test node_modules __pycache__
+
+同步后**必须重启 DSH** 才会生效：Host 进程会缓存已加载的 ESM 模块，插件页关开与
+HMR 重载都只重新装配配置，不会重新读代码。只改 cordis.patch.yml 的配置值则不需要
+重启（但要手动重载一次）。
+
+**不想重启又想让预设那 7 个工具用上新代码**：本目录的 lib/preset 是通过
+`?v=N` 缓存标记加载的 —— 把 dsh-arknights-agent 的 cordis.patch.yml 里
+`?v=2` 加一，再把该 bundle 关开一次即可（Node 按完整 URL 缓存 ESM 模块）。
+
+排查：`ark_status` 看链路；`%TEMP%\arknights-preset-activation.json` 看预设激活现场
+（ok / tools / maskedGlobals / 错误栈）。

@@ -1,0 +1,63 @@
+# dsh-arknights —— 明日方舟「打关卡」插件
+#
+# 本文件既是 bundle 的 patch 层，也是这份插件的运行时配置。
+# 真正被读取的是**安装副本**里的这一份（%USERPROFILE%\dsh-bundles\arknights\cordis.patch.yml）。
+#
+# 生效方式：仓库 → robocopy 到 %USERPROFILE%\dsh-bundles\arknights → plugin_manager(install_bundle)。
+# 只改本文件的配置值：插件页把 arknights 关开一次（或重载）即可；改 lib/ 代码必须重启 DSH。
+#
+# 安全相关字段（默认值偏保守）：
+#   confirmRequired —— 打关卡/推关先出计划，必须再调一次带 confirm=true 才真正执行。
+#   dryRun          —— 只回报计划，绝不 append/start 任何任务。
+#   copilot.enabled —— 关掉后完全不联网查作业，只能用 file 指定的本地作业。
+- insert:
+    - id: arknights
+      name: '@local/arknights'
+      config:
+        # 空串 = 自动探测
+        maaPath: ''
+        pythonPath: ''
+        userDir: ''
+        adbPath: ''
+        address: ''
+        ledgerFile: ''
+        connectionConfig: MuMuEmulator12
+        clientType: Official
+        touchMode: minitouch
+        deploymentWithPause: false
+        requestTimeoutMs: 20000
+        connectTimeoutMs: 120000
+        startupTimeoutMs: 300000
+        idleTimeoutMs: 600000
+        defaultDifficulty: auto
+        confirmRequired: true
+        dryRun: false
+        webStatus: true
+        emulator:
+          managerPath: ''
+          installPath: ''
+          vmIndex: 0
+          launchTimeoutMs: 120000
+        copilot:
+          enabled: true
+          api: https://prts.maa.plus
+          timeoutMs: 15000
+          maxCandidates: 20
+          maxSolutionsPerStage: 3
+          allowBorrowedOper: false
+          cacheDir: ''
+        arkrec:
+          enabled: true
+          api: https://wiki.arkrec.com/v1
+          timeoutMs: 15000
+          cacheTtlHours: 168
+        rogue:
+          theme: Sarkaz
+          mode: Exp
+          startsCount: 9999
+        push:
+          from: ''
+          maxStages: 10
+          stopOnNoSolution: true
+          maxConsecutiveFailures: 2
+          skipLedgerFullStar: true

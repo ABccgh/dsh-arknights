@@ -1,0 +1,45 @@
+{
+  "name": "@local/arknights",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Arknights automation for DeepSeek Harness: fight a requested stage, push through main-story stages, and run Integrated Strategies, driven by the local MAA core and the MuMu emulator",
+  "license": "MIT",
+  "exports": {
+    ".": "./lib/index.js",
+    "./preset": "./lib/preset/index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/sidecar/*.py",
+    "client.js",
+    "locale/*.json",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "docs/*.md"
+  ],
+  "meta": {
+    "title": "明日方舟 · 打关卡",
+    "description": "用本机 MAA + MuMu 模拟器打《明日方舟》：指定关卡就打那关（能代理走代理，不能代理抄作业）、按主线顺序推关、跑集成战略，并带状态面板与关卡账本；另含「明日方舟」智能体预设用的 7 个查询/排查工具。"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\" \"test/*.test.mjs\"",
+    "test:unit": "node --test \"test/*.unit.test.js\"",
+    "test:sidecar": "node --test \"test/sidecar.test.mjs\"",
+    "selftest": "node test/run-selftest.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}
