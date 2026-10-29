@@ -1,0 +1,103 @@
+[
+  {
+    "stageId": "main_01-07",
+    "code": "1-7",
+    "apCost": 6,
+    "dropInfos": [
+      { "itemId": "2001", "dropType": "EXTRA_DROP" },
+      { "itemId": "30011", "dropType": "EXTRA_DROP" },
+      { "itemId": "30012", "dropType": "NORMAL_DROP" },
+      { "itemId": "3003", "dropType": "EXTRA_DROP" },
+      { "itemId": "furni", "dropType": "FURNITURE" }
+    ]
+  },
+  {
+    "stageId": "main_04-04",
+    "code": "4-4",
+    "apCost": 18,
+    "dropInfos": [
+      { "itemId": "30012", "dropType": "NORMAL_DROP" },
+      { "itemId": "30011", "dropType": "EXTRA_DROP" }
+    ]
+  },
+  {
+    "stageId": "main_05-09",
+    "code": "5-9",
+    "apCost": 18,
+    "dropInfos": [{ "itemId": "30033", "dropType": "NORMAL_DROP" }]
+  },
+  {
+    "stageId": "easy_05-09",
+    "code": "5-9",
+    "apCost": 18,
+    "dropInfos": [{ "itemId": "30033", "dropType": "NORMAL_DROP" }]
+  },
+  {
+    "stageId": "main_05-10",
+    "code": "5-10",
+    "apCost": 18,
+    "dropInfos": [
+      { "itemId": "30012", "dropType": "NORMAL_DROP" },
+      { "itemId": "30013", "dropType": "EXTRA_DROP" }
+    ]
+  },
+  {
+    "stageId": "tough_05-10",
+    "code": "5-10",
+    "apCost": 18,
+    "dropInfos": [{ "itemId": "30012", "dropType": "NORMAL_DROP" }]
+  },
+  {
+    "stageId": "main_05-12",
+    "code": "5-12",
+    "dropInfos": [{ "itemId": "30012", "dropType": "NORMAL_DROP" }]
+  },
+  {
+    "stageId": "main_06-05",
+    "code": "6-5",
+    "apCost": 21,
+    "dropInfos": [
+      { "itemId": "30033", "dropType": "NORMAL_DROP" },
+      { "itemId": "30012", "dropType": "NORMAL_DROP" }
+    ]
+  },
+  {
+    "stageId": "main_02-12",
+    "code": "2-12",
+    "apCost": 12,
+    "dropInfos": [{ "itemId": "30012", "dropType": "NORMAL_DROP" }]
+  },
+  {
+    "stageId": "CE-1",
+    "code": "CE-1",
+    "apCost": 30,
+    "dropInfos": [{ "itemId": "3003", "dropType": "NORMAL_DROP" }]
+  },
+  {
+    "stageId": "act999side_08_perm",
+    "code": "AA-8",
+    "apCost": 21,
+    "dropInfos": [{ "itemId": "30033", "dropType": "NORMAL_DROP" }]
+  },
+  {
+    "stageId": "act888side_08_perm",
+    "code": "BB-8",
+    "apCost": 21,
+    "dropInfos": [{ "itemId": "30012", "dropType": "NORMAL_DROP" }]
+  },
+  {
+    "stageId": "act777side_08_perm",
+    "code": "CC-8",
+    "apCost": 21,
+    "dropInfos": [{ "itemId": "30012", "dropType": "NORMAL_DROP" }]
+  },
+  {
+    "stageId": "main_10-09",
+    "code": "10-9",
+    "apCost": 18,
+    "dropInfos": [{ "itemId": "30012", "dropType": "NORMAL_DROP" }]
+  },
+  { "stageId": "bad_02" },
+  { "code": "BROKEN" },
+  null
+]

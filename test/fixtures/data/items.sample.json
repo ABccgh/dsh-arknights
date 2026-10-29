@@ -1,0 +1,82 @@
+{
+  "30012": {
+    "classifyType": "MATERIAL",
+    "description": "常见的源石工业原料。",
+    "icon": "30012.png",
+    "name": "固源岩",
+    "sortId": 10012,
+    "usage": "用于干员精英化与技能升级。"
+  },
+  "30011": {
+    "classifyType": "MATERIAL",
+    "description": "源石暴露在外的部分。",
+    "icon": "30011.png",
+    "name": "源岩",
+    "sortId": 10011,
+    "usage": "基础工业原料。"
+  },
+  "30013": {
+    "classifyType": "MATERIAL",
+    "description": "固源岩的加工品。",
+    "icon": "30013.png",
+    "name": "固源岩组",
+    "sortId": 10013,
+    "usage": "用于高阶精英化。"
+  },
+  "30033": {
+    "classifyType": "MATERIAL",
+    "description": "聚酸酯的加工品。",
+    "icon": "30033.png",
+    "name": "聚酸酯组",
+    "sortId": 10033,
+    "usage": "用于技能升级。"
+  },
+  "30032": {
+    "classifyType": "MATERIAL",
+    "description": "常见的合成材料。",
+    "icon": "30032.png",
+    "name": "聚酸酯",
+    "sortId": 10032,
+    "usage": "用于合成。"
+  },
+  "3003": {
+    "classifyType": "MATERIAL",
+    "description": "通用货币。",
+    "icon": "3003.png",
+    "name": "赤金",
+    "sortId": 10003,
+    "usage": "用于交易。"
+  },
+  "30103": {
+    "classifyType": "MATERIAL",
+    "description": "稀有金属材料。",
+    "icon": "30103.png",
+    "name": "RMA70-12",
+    "sortId": 10103,
+    "usage": "用于专精。"
+  },
+  "2001": {
+    "classifyType": "MATERIAL",
+    "description": "存储了数场战斗的录像。",
+    "icon": "2001.png",
+    "name": "基础作战记录",
+    "sortId": 70004,
+    "usage": "增加干员经验。"
+  },
+  "furni": {
+    "classifyType": "NONE",
+    "icon": "furni.png",
+    "name": "家具",
+    "sortId": -10000,
+    "usage": "用于宿舍布置。"
+  },
+  "31000": {
+    "classifyType": "MATERIAL",
+    "icon": "31000.png"
+  },
+  "31001": {
+    "classifyType": "MATERIAL",
+    "icon": "31001.png",
+    "name": ""
+  }
+}

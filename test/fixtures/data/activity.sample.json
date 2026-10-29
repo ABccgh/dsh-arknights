@@ -1,0 +1,74 @@
+{
+  "Official": {
+    "sideStoryStage": {
+      "AA": {
+        "MinimumRequired": "v6.14.0",
+        "Activity": {
+          "Tip": "SideStory「旧活动」复刻",
+          "StageName": "旧活动",
+          "UtcStartTime": "2026/08/01 04:00:00",
+          "UtcExpireTime": "2026/08/15 03:59:59",
+          "TimeZone": 8
+        },
+        "Stages": [
+          { "Display": "AA-8", "Value": "AA-8", "Drop": "30033" },
+          { "Display": "SSReopen-AA", "Value": "SSReopen-AA", "Drop": "代理1~8关" }
+        ]
+      },
+      "ZZ": {
+        "MinimumRequired": "v6.17.0",
+        "Activity": {
+          "Tip": "SideStory「当前活动」",
+          "StageName": "当前活动",
+          "UtcStartTime": "2026/10/20 16:00:00",
+          "UtcExpireTime": "2026/11/10 03:59:59",
+          "TimeZone": 8
+        },
+        "Stages": [
+          { "Display": "ZZ-8", "Value": "ZZ-8", "Drop": "30012" },
+          { "Display": "ZZ-7", "Value": "ZZ-7", "Drop": "30033" }
+        ]
+      },
+      "FF": {
+        "MinimumRequired": "v6.17.0",
+        "Activity": {
+          "Tip": "SideStory「未来活动」",
+          "StageName": "未来活动",
+          "UtcStartTime": "2027/01/01 16:00:00",
+          "UtcExpireTime": "2027/01/15 03:59:59",
+          "TimeZone": 8
+        },
+        "Stages": [{ "Display": "FF-8", "Value": "FF-8", "Drop": "30103" }]
+      }
+    },
+    "resourceCollection": {
+      "Tip": "资源收集全天开放",
+      "UtcStartTime": "2026/09/29 16:00:00",
+      "UtcExpireTime": "2026/10/20 03:59:59",
+      "TimeZone": 8,
+      "IsResourceCollection": true
+    },
+    "miniGame": [
+      {
+        "MinimumRequired": "v6.21.0-beta.2",
+        "Display": "小游戏入口",
+        "Value": "MiniGame@ZZ@Begin",
+        "Tip": "在活动主界面开始。",
+        "UtcStartTime": "2026/10/20 16:00:00",
+        "UtcExpireTime": "2026/11/10 03:59:59",
+        "TimeZone": 8
+      }
+    ]
+  },
+  "YoStarJP": {
+    "sideStoryStage": {},
+    "resourceCollection": {
+      "Tip": "「資源調達」全ステージ開放",
+      "UtcStartTime": "2026/07/30 16:00:00",
+      "UtcExpireTime": "2026/08/20 03:59:59",
+      "TimeZone": 9,
+      "IsResourceCollection": true
+    },
+    "miniGame": []
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "operators": [
+    {
+      "id": "char_103_angel",
+      "name": "能天使",
+      "rarity": 6,
+      "tags": ["输出", "远程位", "狙击干员", "高级资深干员"]
+    },
+    {
+      "id": "char_4064_mlynar",
+      "name": "玛恩纳",
+      "rarity": 6,
+      "tags": ["输出", "近战位", "近卫干员", "高级资深干员"]
+    },
+    {
+      "id": "char_107_liskam",
+      "name": "雷蛇",
+      "rarity": 5,
+      "tags": ["防护", "输出", "近战位", "重装干员"]
+    },
+    {
+      "id": "char_199_yak",
+      "name": "角峰",
+      "rarity": 5,
+      "tags": ["防护", "近战位", "重装干员"]
+    },
+    {
+      "id": "char_291_swire",
+      "name": "诗怀雅",
+      "rarity": 5,
+      "tags": ["输出", "近战位", "近卫干员"]
+    },
+    {
+      "id": "char_123_fang",
+      "name": "芬",
+      "rarity": 3,
+      "tags": ["费用回复", "近战位", "先锋干员"]
+    },
+    {
+      "id": "char_500_noirc",
+      "name": "黑角",
+      "rarity": 2,
+      "tags": ["防护", "近战位", "重装干员"]
+    },
+    {
+      "id": "char_285_medic2",
+      "name": "Lancet-2",
+      "rarity": 1,
+      "tags": ["支援机械", "治疗", "远程位", "医疗干员"]
+    },
+    { "name": "缺 id 的干员", "rarity": 3, "tags": [] },
+    { "id": "char_999_broken" }
+  ],
+  "tags": {
+    "输出": { "type": "operator", "count": 4 },
+    "防护": { "type": "operator", "count": 3 }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "30012": {
+    "matrix": [
+      { "stageId": "main_01-07", "itemId": "30012", "times": 1000, "quantity": 1250, "stdDev": 0.8, "start": 1556676000000, "end": null },
+      { "stageId": "main_05-10", "itemId": "30012", "times": 0, "quantity": 0, "stdDev": 0, "start": 1562659200000, "end": null },
+      { "stageId": "main_04-04", "itemId": "30012", "times": 500, "quantity": 500, "stdDev": 0.5, "start": 1577174400000, "end": null },
+      { "stageId": "main_06-05", "itemId": "30012", "times": 400, "quantity": 200, "stdDev": 0.4, "start": 1577174400000, "end": null },
+      { "stageId": "main_02-12", "itemId": "30012", "times": 50, "quantity": 10, "stdDev": 0.6, "start": 1556676000000, "end": null },
+      { "stageId": "tough_05-10", "itemId": "30012", "times": 900, "quantity": 900, "stdDev": 0.7, "start": 1562659200000, "end": null },
+      { "stageId": "main_05-12", "itemId": "30012", "times": 100, "quantity": 10, "stdDev": 0.6, "start": 1562659200000, "end": null },
+      { "stageId": "sub_05-1-1", "itemId": "30012", "times": 100, "quantity": 10, "stdDev": 0.5, "start": 1562659200000, "end": null },
+      { "stageId": "act999side_08_perm", "itemId": "30012", "times": 20000, "quantity": 2000, "stdDev": 0.5, "start": 1600000000000, "end": null },
+      { "stageId": "act888side_08_perm", "itemId": "30012", "times": 1000, "quantity": 1000, "stdDev": 0.5, "start": 1600000000000, "end": 1600000001000 },
+      { "stageId": "act777side_08_perm", "itemId": "30012", "times": 1000, "quantity": 100, "stdDev": 0.9, "start": 1600000000000, "end": 4102444800000 },
+      { "stageId": "main_10-09", "itemId": "30012", "times": 1000, "quantity": 1000, "stdDev": 0.5, "start": 4102444800000, "end": null },
+      { "stageId": "randomMaterial_1", "itemId": "30012", "times": 100, "quantity": 50, "stdDev": 0.5, "start": 1600000000000, "end": null }
+    ]
+  },
+  "30033": {
+    "matrix": [
+      { "stageId": "main_05-09", "itemId": "30033", "times": 600, "quantity": 300, "stdDev": 0.5, "start": 1577174400000, "end": null },
+      { "stageId": "easy_05-09", "itemId": "30033", "times": 600, "quantity": 300, "stdDev": 0.5, "start": 1577174400000, "end": null },
+      { "stageId": "main_06-05", "itemId": "30033", "times": 800, "quantity": 200, "stdDev": 0.6, "start": 1577174400000, "end": null },
+      { "stageId": "act999side_08_perm", "itemId": "30033", "times": 10000, "quantity": 1000, "stdDev": 0.5, "start": 1600000000000, "end": null }
+    ]
+  },
+  "3003": {
+    "matrix": [
+      { "stageId": "CE-1", "itemId": "3003", "times": 100, "quantity": 100, "stdDev": 0.4, "start": 1577174400000, "end": null },
+      { "stageId": "main_01-07", "itemId": "3003", "times": 1000, "quantity": 100, "stdDev": 0.4, "start": 1577174400000, "end": null }
+    ]
+  }
+}

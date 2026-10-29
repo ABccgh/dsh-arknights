@@ -1,0 +1,34 @@
+{
+  "childNodes": [
+    {
+      "story": "主线关卡",
+      "childNodes": [
+        {
+          "episode": "第5章 长夜终尽",
+          "childNodes": [
+            { "operation": "5-10", "cn_name": "长夜终尽", "en_name": "5-10", "challenge": "" },
+            { "operation": "5-9", "cn_name": "孽生恶物", "en_name": "5-9", "challenge": "不能使用重装" }
+          ]
+        }
+      ]
+    },
+    {
+      "story": "活动关卡",
+      "childNodes": [
+        {
+          "name": "孤星",
+          "episode": "CW",
+          "childNodes": [{ "operation": "CW-1", "cn_name": "孤星", "en_name": "CW-1" }]
+        },
+        {
+          "name": "重复的关卡名（应忽略）",
+          "childNodes": [{ "operation": "5-10", "cn_name": "重复的关卡名" }]
+        }
+      ]
+    },
+    {
+      "story": "资源关",
+      "childNodes": [{ "episode": "货物运送", "childNodes": [{ "operation": "CE-1", "cn_name": "货物运送" }] }]
+    }
+  ]
+}

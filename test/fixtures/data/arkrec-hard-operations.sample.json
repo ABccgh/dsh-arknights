@@ -1,0 +1,17 @@
+[
+  {
+    "name": "常规队",
+    "value": [
+      { "operation": "5-10", "cn_name": "长夜终尽", "operationType": "challenge", "num": 2, "star": 11 },
+      { "operation": "5-10", "cn_name": "长夜终尽", "operationType": "normal", "num": 3, "star": 12 },
+      { "operation": "CW-1", "cn_name": "孤星", "operationType": "normal", "num": 4 }
+    ]
+  },
+  {
+    "name": "精一1级",
+    "value": [
+      { "operation": "5-10", "num": 5 },
+      { "operation": "CE-1", "num": 2 }
+    ]
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "options": {
+    "taskDelay": 500,
+    "battleStartTimeoutSeconds": 60
+  },
+  "packageName": {
+    "Official": "com.hypergryph.arknights",
+    "Bilibili": "com.hypergryph.arknights.bilibili",
+    "YoStarEN": "com.YoStarEN.Arknights",
+    "YoStarJP": "com.YoStarJP.Arknights",
+    "YoStarKR": "com.YoStarKR.Arknights",
+    "txwy": "tw.txwy.and.arknights"
+  },
+  "connection": []
+}
