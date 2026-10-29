@@ -2198,8 +2198,8 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'ark-big-stat' },
-            h('span', { className: 'ark-big-num' }, sanity !== null ? asCount(sanity.current) : '—'),
-            h('span', { className: 'ark-big-max' }, '/ ' + (sanity !== null ? asCount(sanity.max) : '—')),
+            h('span', { className: 'ark-big-num' }, sanity !== null && Number.isFinite(sanity.current) ? asCount(sanity.current) : '—'),
+            h('span', { className: 'ark-big-max' }, '/ ' + (sanity !== null && Number.isFinite(sanity.max) ? asCount(sanity.max) : '—')),
           ),
           h(
             'div',
@@ -3436,7 +3436,11 @@ window.__ModuleLoader__.load({
             : h(
                 'ul',
                 { className: 'ark-list' },
-                activity.items.map(function (item, index) {
+                asArray(activity.items).slice().sort(function (a, b) {
+                  const left = asRecord(a);
+                  const right = asRecord(b);
+                  return ((right !== null && right.active === true) ? 1 : 0) - ((left !== null && left.active === true) ? 1 : 0);
+                }).map(function (item, index) {
                   const record = asRecord(item) || {};
                   const stages = asArray(record.stages);
                   return h(
@@ -3447,8 +3451,8 @@ window.__ModuleLoader__.load({
                       { className: 'ark-data-head' },
                       h('span', { className: 'ark-data-name' }, pickString(record, ['name'])),
                       record.expired === true ? h(Badge, { tone: 'idle' }, t('data.expired')) : h(Badge, { tone: 'success' }, t('data.active')),
-                      h('span', { className: 'ark-data-sub' }, t('data.activityStart') + ' ' + formatClock(asString(record.start))),
-                      h('span', { className: 'ark-data-sub' }, t('data.activityEnd') + ' ' + formatClock(asString(record.end))),
+                      h('span', { className: 'ark-data-sub' }, t('data.activityStart') + ' ' + formatClock(record.start)),
+                      h('span', { className: 'ark-data-sub' }, t('data.activityEnd') + ' ' + formatClock(record.end)),
                     ),
                     asString(record.tip) !== '' ? h('span', { className: 'ark-data-sub' }, asString(record.tip)) : null,
                     stages.length > 0
@@ -3787,7 +3791,6 @@ window.__ModuleLoader__.load({
           h(KeyValue, { label: t('settings.defaultDifficulty'), value: config !== null ? difficultyLabel(t, asString(config.defaultDifficulty)) : '—' }),
           h(KeyValue, { label: t('settings.confirmRequired'), value: config !== null ? flag(config.confirmRequired) : '—' }),
           h(KeyValue, { label: t('settings.dryRun'), value: config !== null ? flag(config.dryRun) : '—' }),
-          safety !== null ? h(KeyValue, { label: t('settings.confirmRequired'), value: flag(safety.confirmRequired) }) : null,
         ),
         h(
           Card,

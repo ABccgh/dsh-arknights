@@ -194,3 +194,33 @@ test('index: createDeps 对未归一配置也能兜底（自动 normalize）', (
   deps.session.dispose();
 });
 
+
+test('index: webServer 延迟就绪时自动补注册路由', async () => {
+  const dir = makeTempDir();
+  try {
+    const ctx = fakeCtx();
+    let ready = false;
+    const baseGet = ctx.get.bind(ctx);
+    ctx.get = (name) => (name === 'webServer' && !ready ? undefined : baseGet(name));
+    const deps = makeDeps(dir);
+    await apply(ctx, {}, {
+      logger: makeLogger(),
+      env: fakeEnv(),
+      state: createState(),
+      session: fakeSession(),
+      data: fakeData(),
+      ledger: deps.ledger,
+      box: deps.box,
+      history: deps.history,
+    });
+    assert.equal(ctx.routes.length, 0);
+    ready = true;
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    assert.equal(ctx.routes.length, 3);
+    assert.deepEqual(ctx.routes.map((route) => route.path).sort(), [
+      '/arknights/action', '/arknights/query', '/arknights/status',
+    ]);
+  } finally {
+    removeDir(dir);
+  }
+});
