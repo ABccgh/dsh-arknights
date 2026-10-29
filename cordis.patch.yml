@@ -1,14 +1,15 @@
-# dsh-arknights —— 明日方舟「打关卡」插件
+# dsh-arknights —— 明日方舟助手 v1.0
 #
 # 本文件既是 bundle 的 patch 层，也是这份插件的运行时配置。
 # 真正被读取的是**安装副本**里的这一份（%USERPROFILE%\dsh-bundles\arknights\cordis.patch.yml）。
 #
-# 生效方式：仓库 → robocopy 到 %USERPROFILE%\dsh-bundles\arknights → plugin_manager(install_bundle)。
+# 生效方式：仓库 → robocopy 到 %USERPROFILE%\dsh-bundles\arknights → 重启 DSH。
 # 只改本文件的配置值：插件页把 arknights 关开一次（或重载）即可；改 lib/ 代码必须重启 DSH。
 #
 # 安全相关字段（默认值偏保守）：
-#   confirmRequired —— 打关卡/推关先出计划，必须再调一次带 confirm=true 才真正执行。
+#   confirmRequired —— 打关卡/推关/肉鸽/日常/基建/信用先出计划，必须再调一次带 confirm=true 才执行。
 #   dryRun          —— 只回报计划，绝不 append/start 任何任务。
+#   safety.*        —— 理智药 / 至纯源石 / 招聘许可 / 加急许可的硬闸，默认全 false。
 #   copilot.enabled —— 关掉后完全不联网查作业，只能用 file 指定的本地作业。
 - insert:
     - id: arknights
@@ -21,10 +22,12 @@
         adbPath: ''
         address: ''
         ledgerFile: ''
+        cacheDir: ''
         connectionConfig: MuMuEmulator12
         clientType: Official
         touchMode: minitouch
         deploymentWithPause: false
+        gpuOcr: auto
         requestTimeoutMs: 20000
         connectTimeoutMs: 120000
         startupTimeoutMs: 300000
@@ -38,6 +41,15 @@
           installPath: ''
           vmIndex: 0
           launchTimeoutMs: 120000
+        startup:
+          enabled: true
+          startGameEnabled: true
+          timeoutMs: 300000
+        safety:
+          allowSanityPotion: false
+          allowOriginitePrime: false
+          allowRecruitPermits: false
+          allowExpedite: false
         copilot:
           enabled: true
           api: https://prts.maa.plus
@@ -45,19 +57,55 @@
           maxCandidates: 20
           maxSolutionsPerStage: 3
           allowBorrowedOper: false
+          ignoreRequirements: true
           cacheDir: ''
         arkrec:
           enabled: true
           api: https://wiki.arkrec.com/v1
           timeoutMs: 15000
           cacheTtlHours: 168
+        penguin:
+          enabled: true
+          api: https://penguin-stats.cn
+          timeoutMs: 15000
+          cacheTtlHours: 168
+        activity:
+          enabled: true
+          api: https://api.maa.plus/MaaAssistantArknights/api/gui/StageActivityV2.json
+          timeoutMs: 15000
+          cacheTtlHours: 6
         rogue:
           theme: Sarkaz
           mode: Exp
           startsCount: 9999
+          squad: ''
+          roles: ''
+          coreChars: []
+          difficulty: -1
+          params: {}
         push:
           from: ''
           maxStages: 10
           stopOnNoSolution: true
           maxConsecutiveFailures: 2
           skipLedgerFullStar: true
+        daily:
+          tasks:
+            - award
+            - mall
+            - infrast
+          skipDone: true
+          award: {}
+          mall: {}
+          infrast: {}
+          recruit:
+            mode: analyze
+          box:
+            enabled: false
+        box:
+          file: ''
+          operboxTimeoutMs: 1200000
+          depotTimeoutMs: 1200000
+        history:
+          file: ''
+          maxEntries: 200
