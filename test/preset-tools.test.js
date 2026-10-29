@@ -1,10 +1,11 @@
 /**
- * 预设作用域 7 个工具与 `installGlobalToolMask` 的离线单元测试。
+ * 预设作用域 2 个工具（`ark_diag` / `ark_solutions`）与 `installGlobalToolMask` 的离线单元测试。
  *
- * 覆盖：lib/preset/index.js（createDeps / createTools / installGlobalToolMask）与
- * tools/{stages,solutions,screen,device,game,emulator,logs}.js。
+ * 覆盖：lib/preset/index.js（createDeps / createTools / installGlobalToolMask / apply / 激活报告）、
+ * lib/preset/config.js（配置归一与路径）、lib/preset/tools/diag.js（六个 action 的纯逻辑与假 adb 输出）、
+ * lib/preset/tools/solutions.js（作业站过滤与调用串）。
  *
- * 全部通过 createDeps 的测试接缝（detect / run / copilot / arkrec / ledger）注入假实现：
+ * 全部通过 createDeps 的测试接缝（detect / run / copilot / sleep）注入假实现：
  * 不联网、不跑 adb/MuMuManager、不碰 MAA 与模拟器；临时资源目录一律建在 os.tmpdir() 下。
  */
 
@@ -14,34 +15,46 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { createDeps, createTools, installGlobalToolMask } from '../lib/preset/index.js';
-import { createToolDefinitions } from '../lib/index.js';
-import { PNG_MAGIC, pruneShots } from '../lib/preset/tools/screen.js';
-import { is169, parseForeground, parseWmSize } from '../lib/preset/tools/device.js';
-import { DEFAULT_COMPONENT, DEFAULT_PACKAGE, parseStartComponent, resolveGameTarget } from '../lib/preset/tools/game.js';
-import { renderStatus } from '../lib/preset/tools/emulator.js';
-
-/** 预设工具的固定顺序（docs/contracts.md 与 lib/preset/index.js 一致）。 */
-const PRESET_TOOL_NAMES = ['ark_stages', 'ark_solutions', 'ark_screen', 'ark_device', 'ark_game', 'ark_emulator', 'ark_log'];
+import { GLOBAL_TOOL_NAMES, PRESET_TOOL_NAMES, PRTS_TOOL_NAMES } from '../lib/contracts.js';
+import {
+  apply,
+  createDeps,
+  createTools,
+  installGlobalToolMask,
+  writeActivationReport,
+} from '../lib/preset/index.js';
+import { normalizePresetConfig, PRESET_VERSION, resolvePresetPaths } from '../lib/preset/config.js';
+import {
+  DEFAULT_COMPONENT,
+  DEFAULT_PACKAGE,
+  is169,
+  parseForeground,
+  parsePngSize,
+  parseStartComponent,
+  parseWmSize,
+  PNG_SIGNATURE,
+  pruneShots,
+  readLogWindow,
+  renderEmulatorStatus,
+  resolveGameTarget,
+} from '../lib/preset/tools/diag.js';
+import { difficultyLabel, isRaidSolution } from '../lib/preset/tools/solutions.js';
 
 /** 夹具：关卡表（code/stageId/apCost/dropInfos）。 */
 const STAGES = [
-  { code: '5-10', stageId: 'main_05-10', apCost: 18, dropInfos: [{ itemId: '30012' }, { itemId: '30061' }] },
+  { code: '5-10', stageId: 'main_05-10', apCost: 18, dropInfos: [{ itemId: '30012' }] },
   { code: '5-10', stageId: 'tough_05-10', apCost: 18, dropInfos: [] },
-  { code: '5-11', stageId: 'main_05-11', apCost: 18, dropInfos: [{ itemId: '30061' }] },
   { code: 'CE-6', stageId: 'CE-6', apCost: 36, dropInfos: [{ itemId: '30012' }] },
-  { code: '1-7', stageId: 'main_01-07', apCost: 6, dropInfos: [{ itemId: '30012' }] },
-  { code: '7-2', stageId: 'main_07-02', apCost: 18, dropInfos: [] },
 ];
 
-/** 夹具：材料 id → 中文名。 */
-const ITEM_INDEX = {
-  30012: { name: '固源岩' },
-  30061: { name: '炽合金' },
-};
+/** 夹具：材料 id → 中文名（loadResources 需要）。 */
+const ITEM_INDEX = { 30012: { name: '固源岩' } };
 
 /** 临时目录统一登记，测试结束一次性删掉。 */
 const TMP_DIRS = [];
+
+/** 夹具 MAA 根目录（before 里创建）。 */
+let MAA_ROOT = '';
 
 /**
  * 建一个临时目录并登记清理。
@@ -54,15 +67,11 @@ async function makeTmp(prefix) {
   return dir;
 }
 
-/** 夹具 MAA 根目录（before 里创建）。 */
-let MAA_ROOT = '';
-
 before(async () => {
   MAA_ROOT = await makeTmp('dsh-ark-preset-maa-');
   await fs.mkdir(path.join(MAA_ROOT, 'resource'), { recursive: true });
   await fs.writeFile(path.join(MAA_ROOT, 'resource', 'stages.json'), JSON.stringify(STAGES), 'utf8');
   await fs.writeFile(path.join(MAA_ROOT, 'resource', 'item_index.json'), JSON.stringify(ITEM_INDEX), 'utf8');
-  // ark_game 读的 MAA 客户端配置（真实 MAA 的形状）
   await fs.writeFile(path.join(MAA_ROOT, 'resource', 'config.json'), JSON.stringify({
     packageName: {
       Official: 'com.hypergryph.arknights',
@@ -78,6 +87,8 @@ before(async () => {
 after(async () => {
   await Promise.all(TMP_DIRS.map((dir) => fs.rm(dir, { recursive: true, force: true }).catch(() => {})));
 });
+
+// —— 夹具 ——
 
 /**
  * 造一个探测结果（工具的 detect 接缝返回它）。
@@ -104,9 +115,11 @@ function detection(overrides = {}) {
     vmConfig: null,
     vmIndex: 0,
     adbPath: 'adb',
-    adbTried: ['C:\\adb'],
+    adbTried: ['C:\\adb.exe'],
     address: '127.0.0.1:16384',
     pythonPath: '',
+    pythonVersion: '',
+    pythonTried: [],
     ...overrides,
     emulator,
   };
@@ -155,7 +168,7 @@ function makeRun() {
 }
 
 /**
- * 造一个按命令分发的 adb 假实现（ark_device / ark_game 用）。
+ * 造一个按命令分发的 adb 假实现（device / game 用）。
  * @param {Record<string, Function>} handlers - `命令子串 → () => 结果`。
  * @returns {{ adb: Function, calls: Array<{ adbPath: string, address: string, command: string[] }> }} 结果。
  */
@@ -174,38 +187,22 @@ function makeAdbRouter(handlers = {}) {
   };
 }
 
-/** 假账本：`get` 查表，其余写操作空实现。 */
-function makeLedger(records = {}) {
-  return {
-    get: (code) => records[code],
-    recordRun: () => {},
-    recordFailure: () => {},
-    setPush: () => {},
-    nextPushStage: () => '',
-    pushView: () => ({}),
-  };
-}
-
-/** 假 ArkRec 客户端。 */
-function makeArkrec(describe = async () => null) {
-  return { describe };
-}
-
 /**
  * 造一整套预设依赖 + 按名字索引的工具。
  * @param {{ config?: Record<string, any>, detect?: Function, run?: Record<string, Function>,
- *   copilot?: Record<string, any>, arkrec?: Record<string, any>, ledger?: Record<string, any> }} [options]
- *   覆盖项。
+ *   copilot?: Record<string, any>, sleep?: Function, logger?: Record<string, any> }} [options] 覆盖项。
  * @returns {{ deps: Record<string, any>, tools: object[], byName: Record<string, any> }} 结果。
  */
 function makeHarness(options = {}) {
   const deps = createDeps(options.config ?? {}, {
     detect: options.detect ?? makeDetect({}),
     run: options.run ?? makeRun().run,
-    copilot: options.copilot ?? { query: async () => ({ solutions: [], total: 0, reason: '' }), pick: (list) => list },
-    arkrec: options.arkrec ?? makeArkrec(),
-    ledger: options.ledger ?? makeLedger(),
-    logger: { info() {}, warn() {}, error() {} },
+    copilot: options.copilot ?? {
+      query: async () => ({ solutions: [], total: 0, reason: '' }),
+      pick: (list) => list,
+    },
+    sleep: options.sleep ?? (async () => {}),
+    logger: options.logger ?? { info() {}, warn() {}, error() {} },
   });
   const tools = createTools(deps);
   return { deps, tools, byName: Object.fromEntries(tools.map((tool) => [tool.name, tool])) };
@@ -262,13 +259,44 @@ function toolText(result) {
   return result.text;
 }
 
-// —— 1. 工具表 ——
+/**
+ * 造一个 PNG 块。
+ * @param {string} type - 4 字符块类型。
+ * @param {Buffer} data - 块数据。
+ * @returns {Buffer} 块字节。
+ */
+function pngChunk(type, data) {
+  const head = Buffer.alloc(8);
+  head.writeUInt32BE(data.length, 0);
+  head.write(type, 4, 'latin1');
+  return Buffer.concat([head, data, Buffer.alloc(4)]);
+}
 
-test('preset tools: 7 个工具按固定顺序、描述与 JSON Schema 齐备', () => {
+/**
+ * 造一个最小可解析 PNG（签名 + IHDR；CRC 留 0，解析器不校验 CRC）。
+ * @param {number} width - 宽。
+ * @param {number} height - 高。
+ * @returns {Buffer} PNG 字节。
+ */
+function makePng(width, height) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  return Buffer.concat([PNG_SIGNATURE, pngChunk('IHDR', ihdr), Buffer.from([0x00, 0x00, 0x00, 0x00])]);
+}
+
+// ============================================================
+// 1. 工具表
+// ============================================================
+
+test('preset tools: 2 个工具、顺序与 contracts 一致、描述与 JSON Schema 齐备', () => {
   const { tools } = makeHarness();
   assert.deepEqual(tools.map((tool) => tool.name), PRESET_TOOL_NAMES);
+  assert.deepEqual(tools.map((tool) => tool.name), ['ark_diag', 'ark_solutions']);
   for (const tool of tools) {
-    assert.ok(tool.description.length >= 20, `${tool.name} 的 description 太短`);
+    assert.ok(tool.description.length >= 40, `${tool.name} 的 description 太短`);
     assert.equal(tool.parameters.type, 'object');
     assert.equal(tool.parameters.additionalProperties, false);
     assert.equal(tool.output.schema.type, 'object');
@@ -278,177 +306,40 @@ test('preset tools: 7 个工具按固定顺序、描述与 JSON Schema 齐备', 
   }
 });
 
-test('preset tools: ark_stages / ark_solutions 的文档化参数', () => {
+test('preset tools: ark_diag 的 action 六值必填，子动作参数都有枚举', () => {
   const { byName } = makeHarness();
-  const stages = byName.ark_stages.parameters;
-  assert.deepEqual(Object.keys(stages.properties).sort(), ['limit', 'query', 'scope']);
-  assert.deepEqual(stages.properties.scope.enum, ['all', 'mainline', 'missing']);
-  assert.equal(stages.properties.limit.type, 'integer');
-
-  const solutions = byName.ark_solutions.parameters;
-  assert.deepEqual(Object.keys(solutions.properties).sort(), ['difficulty', 'limit', 'minRating', 'stage']);
-  assert.deepEqual(solutions.required, ['stage']);
-  assert.deepEqual(solutions.properties.difficulty.enum, ['auto', 'easy', 'tough']);
+  const parameters = byName.ark_diag.parameters;
+  assert.deepEqual(Object.keys(parameters.properties).sort(), ['action', 'emulatorAction', 'gameAction', 'keep', 'level', 'lines']);
+  assert.deepEqual(parameters.required, ['action']);
+  assert.deepEqual(parameters.properties.action.enum, ['screen', 'logs', 'device', 'emulator', 'game', 'probe']);
+  assert.equal(parameters.properties.action.type, 'string');
+  assert.deepEqual(parameters.properties.level.enum, ['all', 'warn', 'error']);
+  assert.deepEqual(parameters.properties.emulatorAction.enum, ['status', 'start', 'stop']);
+  assert.deepEqual(parameters.properties.gameAction.enum, ['start', 'stop']);
+  assert.equal(parameters.properties.keep.type, 'integer');
+  assert.equal(parameters.properties.lines.type, 'integer');
 });
 
-// —— 2. ark_stages ——
-
-test('ark_stages: 单关详情含中文名/理智/难度/掉落/账本', async () => {
-  const { byName } = makeHarness({
-    arkrec: makeArkrec(async (code) => (code === '5-10'
-      ? {
-        cn_name: '长夜终尽',
-        story: '主线',
-        group: '第五章',
-        challenge: '部署费用三倍',
-        minOperators: 4,
-        url: 'https://wiki.arkrec.com/operation/5-10',
-      }
-      : null)),
-    ledger: makeLedger({ '5-10': { fullStar: true, primeClaimed: true, stars: 3 } }),
-  });
-  const text = toolText(await byName.ark_stages.execute({ query: '5-10' }));
-  assert.match(text, /关卡：5-10 长夜终尽/);
-  assert.match(text, /归属：主线 · 第五章/);
-  assert.match(text, /理智：18 \/ 次（难度 普通）/);
-  assert.match(text, /可用难度：普通 \/ 磨难（险地\/磨难用 difficulty=tough）/);
-  assert.match(text, /掉落：固源岩、炽合金/);
-  assert.match(text, /突袭\/险地条件：部署费用三倍/);
-  assert.match(text, /ArkRec 少人纪录：4 人/);
-  assert.match(text, /账本：已满星 · 源石已领/);
-});
-
-test('ark_stages: 未满星账本显示上次星级', async () => {
-  const { byName } = makeHarness({ ledger: makeLedger({ '5-10': { fullStar: false, stars: 2 } }) });
-  const text = toolText(await byName.ark_stages.execute({ query: '5-10' }));
-  assert.match(text, /账本：上次 2 星/);
-});
-
-test('ark_stages: 材料反查按理智升序', async () => {
+test('preset tools: ark_solutions 的 stage 必填、difficulty 三档', () => {
   const { byName } = makeHarness();
-  const text = toolText(await byName.ark_stages.execute({ query: '固源岩' }));
-  assert.match(text, /掉落「固源岩」的关卡（按理智升序）：/);
-  const rows = text.split('\n').filter((line) => line.startsWith('- '));
-  assert.equal(rows.length, 3);
-  assert.match(rows[0], /^- 1-7 · 6 理智 · 掉落 固源岩/);
-  assert.match(rows[1], /^- 5-10 · 18 理智 · 掉落 固源岩、炽合金/);
-  assert.match(rows[2], /^- CE-6 · 36 理智 · 掉落 固源岩/);
+  const parameters = byName.ark_solutions.parameters;
+  assert.deepEqual(Object.keys(parameters.properties).sort(), ['difficulty', 'limit', 'minRating', 'stage']);
+  assert.deepEqual(parameters.required, ['stage']);
+  assert.deepEqual(parameters.properties.difficulty.enum, ['auto', 'easy', 'tough']);
+  assert.equal(parameters.properties.limit.type, 'integer');
+  assert.equal(parameters.properties.minRating.type, 'integer');
 });
 
-test('ark_stages: 代码前缀列出（CE → CE-6）', async () => {
-  const { byName } = makeHarness();
-  const text = toolText(await byName.ark_stages.execute({ query: 'CE' }));
-  assert.match(text, /代码以「CE」开头的关卡：/);
-  assert.match(text, /- CE-6 · 36 理智/);
-  assert.doesNotMatch(text, /- 5-10/);
-});
+// ============================================================
+// 2. ark_diag — screen
+// ============================================================
 
-test('ark_stages: 未知查询给可操作提示', async () => {
-  const { byName } = makeHarness();
-  const text = toolText(await byName.ark_stages.execute({ query: 'ZZZ' }));
-  assert.match(text, /没查到「ZZZ」/);
-  assert.match(text, /试试 CE-6、5-10、16-16/);
-});
-
-test('ark_stages: scope=mainline 列出主线序列', async () => {
-  const { byName } = makeHarness();
-  const text = toolText(await byName.ark_stages.execute({ scope: 'mainline' }));
-  assert.match(text, /主线关卡（共 4 关，显示前 30）：/);
-  const codes = text.split('\n').filter((line) => line.startsWith('- ')).map((line) => /^- (\S+)/.exec(line)?.[1]);
-  assert.deepEqual(codes, ['1-7', '5-10', '5-11', '7-2']);
-});
-
-test('ark_stages: scope=missing 只列账本里有记录且未满星的关', async () => {
-  const { byName } = makeHarness({
-    ledger: makeLedger({
-      '5-10': { fullStar: true },
-      '5-11': { fullStar: false, stars: 2 },
-      'CE-6': { fullStar: false, stars: 0 },
-      '7-2': undefined,
-    }),
-  });
-  const text = toolText(await byName.ark_stages.execute({ scope: 'missing' }));
-  assert.match(text, /账本里未满星的关（2）：/);
-  const rows = text.split('\n').filter((line) => line.startsWith('- '));
-  assert.equal(rows.length, 2);
-  assert.match(rows[0], /^- 5-11/);
-  assert.match(rows[1], /^- CE-6/);
-  assert.doesNotMatch(text, /7-2/);
-  assert.doesNotMatch(text, /1-7/);
-});
-
-test('ark_stages: 没有 MAA 时给出试过的路径（maaPath 为空）', async () => {
-  const { byName } = makeHarness({
-    detect: makeDetect({ maaPath: '', maaTried: ['C:\\A\\MaaCore.dll', 'C:\\B\\MaaCore.dll'] }),
-  });
-  const text = toolText(await byName.ark_stages.execute({ query: '5-10' }));
-  assert.match(text, /没找到 MAA（MaaCore\.dll），查不了关卡表。/);
-  assert.match(text, /试过：C:\\A\\MaaCore\.dll；C:\\B\\MaaCore\.dll/);
-});
-
-test('ark_stages: 默认 all + limit 截断', async () => {
-  const { byName } = makeHarness();
-  const all = toolText(await byName.ark_stages.execute({}));
-  assert.match(all, /关卡表前 6 条（共 6）：/);
-  const limited = toolText(await byName.ark_stages.execute({ limit: 2 }));
-  assert.match(limited, /关卡表前 2 条（共 6）：/);
-});
-
-// —— 3. ark_solutions ——
-
-test('ark_solutions: 作业行含 id/评分/干员与可复制的 ark_fight 调用串', async () => {
-  const copilot = makeSolutionsCopilot(SOLUTIONS, 2);
-  const { byName } = makeHarness({ copilot });
-  const text = toolText(await byName.ark_solutions.execute({ stage: '5-10' }));
-  assert.match(text, /5-10 的作业（站上共 2 份，匹配 当前难度 2 份显示 2 条）：/);
-  assert.match(text, /- id=104178 · 评分 9\/10（好评） · 热度 12\.3 · 干员 2/);
-  assert.match(text, /需要：德克萨斯、能天使/);
-  assert.match(text, /- id=205500 · 评分 3\/10 · 热度 1\.5 · 干员 0 \[险地\/磨难\]/);
-  assert.match(text, /用它打：ark_fight stages=5-10 copilotId=104178 confirm=true/);
-  assert.match(text, /（作业站列表接口的内容是截断版，真正执行时插件会按 id 取完整作业）/);
-  assert.deepEqual(copilot.calls.query, ['5-10']);
-  assert.equal(copilot.calls.pick.length, 1);
-  assert.equal(copilot.calls.pick[0].code, '5-10');
-  assert.equal(copilot.calls.pick[0].difficulty, 'auto');
-});
-
-test('ark_solutions: difficulty=tough 时调用串带 difficulty 且提示磨难/险地', async () => {
-  const copilot = makeSolutionsCopilot(SOLUTIONS, 2);
-  const { byName } = makeHarness({ copilot });
-  const text = toolText(await byName.ark_solutions.execute({ stage: '5-10', difficulty: 'tough' }));
-  assert.match(text, /匹配 磨难\/险地 2 份显示 2 条/);
-  assert.match(text, /用它打：ark_fight stages=5-10 difficulty=tough copilotId=104178 confirm=true/);
-  assert.equal(copilot.calls.pick[0].difficulty, 'tough');
-});
-
-test('ark_solutions: minRating 过滤作业', async () => {
-  const { byName } = makeHarness({ copilot: makeSolutionsCopilot(SOLUTIONS, 2) });
-  const filtered = toolText(await byName.ark_solutions.execute({ stage: '5-10', minRating: 5 }));
-  assert.match(filtered, /id=104178/);
-  assert.doesNotMatch(filtered, /id=205500/);
-
-  const none = toolText(await byName.ark_solutions.execute({ stage: '5-10', minRating: 10 }));
-  assert.match(none, /没有评分 ≥ 10 的匹配作业/);
-  assert.doesNotMatch(none, /用它打：/);
-});
-
-test('ark_solutions: 作业站没有作业时给原因与三条出路', async () => {
-  const { byName } = makeHarness({
-    copilot: makeSolutionsCopilot([], 0, '作业站返回 HTTP 503'),
-  });
-  const text = toolText(await byName.ark_solutions.execute({ stage: '5-10' }));
-  assert.match(text, /作业站上没查到「5-10」的作业（作业站返回 HTTP 503）。/);
-  assert.match(text, /换关卡代码重试、用 file= 传本地作业/);
-});
-
-// —— 4. ark_screen ——
-
-test('ark_screen: 抓到的 PNG 落到 screenshotDir 并按 keep 裁剪旧图', async () => {
+test('ark_diag screen: 抓图落盘、返回路径与 PNG 尺寸、按 keep 环形清理', async () => {
   const shotDir = await makeTmp('dsh-ark-preset-shots-');
   for (let index = 0; index < 4; index += 1) {
     await fs.writeFile(path.join(shotDir, `a-${index}.png`), Buffer.from('old'));
   }
-  const png = Buffer.concat([PNG_MAGIC, Buffer.from([0x0d, 0x0a, 0x1a, 0x0a, 0x01, 0x02, 0x03])]);
+  const png = makePng(1920, 1080);
   const { run, calls } = makeRun();
   run.cliBuffer = async (...args) => {
     calls.cliBuffer.push(args);
@@ -459,8 +350,10 @@ test('ark_screen: 抓到的 PNG 落到 screenshotDir 并按 keep 裁剪旧图', 
     detect: makeDetect({ address: 'x:1', emulator: { androidStarted: true } }),
     run,
   });
-  const text = toolText(await byName.ark_screen.execute({ keep: 2 }));
+  const text = toolText(await byName.ark_diag.execute({ action: 'screen', keep: 2 }));
   assert.match(text, /已抓图：/);
+  assert.match(text, /尺寸 1920×1080/);
+  assert.match(text, /目录只保留最近 2 张/);
   assert.match(text, /用 read_image 打开这个路径/);
 
   const names = (await fs.readdir(shotDir)).filter((name) => name.endsWith('.png')).sort();
@@ -468,12 +361,35 @@ test('ark_screen: 抓到的 PNG 落到 screenshotDir 并按 keep 裁剪旧图', 
   const shotName = names.find((name) => name.startsWith('shot-'));
   assert.ok(shotName, `截图文件应叫 shot-*.png，实际：${names.join(', ')}`);
   assert.deepEqual(await fs.readFile(path.join(shotDir, shotName)), png);
-
-  // 传给 adb 的参数：-s <address> exec-out screencap -p
   assert.deepEqual(calls.cliBuffer[0][1], ['-s', 'x:1', 'exec-out', 'screencap', '-p']);
 });
 
-test('ark_screen: pruneShots 只保留最近 keep 张 png，忽略非 png', async () => {
+test('parsePngSize: 逐块走到 IHDR 取宽高；截断/非 PNG/坏块返回 null', () => {
+  assert.deepEqual(parsePngSize(makePng(1920, 1080)), { width: 1920, height: 1080 });
+  assert.deepEqual(parsePngSize(makePng(2560, 1440)), { width: 2560, height: 1440 });
+
+  // IHDR 不在第一个块：tEXt 之后仍能走块解析找到。
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(1280, 0);
+  ihdr.writeUInt32BE(720, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  const walked = Buffer.concat([
+    PNG_SIGNATURE,
+    pngChunk('tEXt', Buffer.from('Comment\0hi', 'latin1')),
+    pngChunk('IHDR', ihdr),
+    Buffer.alloc(4),
+  ]);
+  assert.deepEqual(parsePngSize(walked), { width: 1280, height: 720 });
+
+  assert.equal(parsePngSize(Buffer.alloc(0)), null);
+  assert.equal(parsePngSize(Buffer.from('not-a-png-at-all')), null);
+  assert.equal(parsePngSize(Buffer.concat([PNG_SIGNATURE, Buffer.from('garbage')])), null);
+  assert.equal(parsePngSize(makePng(0, 1080)), null);
+  assert.equal(parsePngSize(makePng(1920, 1080).subarray(0, 20)), null, '截断的 IHDR 应返回 null');
+});
+
+test('pruneShots: 只保留最近 keep 张 png，忽略非 png', async () => {
   const dir = await makeTmp('dsh-ark-preset-prune-');
   for (let index = 0; index < 5; index += 1) {
     await fs.writeFile(path.join(dir, `0${index}.png`), 'x');
@@ -483,17 +399,16 @@ test('ark_screen: pruneShots 只保留最近 keep 张 png，忽略非 png', asyn
   assert.deepEqual((await fs.readdir(dir)).sort(), ['03.png', '04.png', 'note.txt']);
 });
 
-test('ark_screen: 模拟器没开机 → E_CONNECT', async () => {
-  const { byName } = makeHarness({
-    detect: makeDetect({ emulator: { androidStarted: false } }),
-  });
-  const text = toolText(await byName.ark_screen.execute({}));
-  assert.match(text, /抓图失败。/);
+test('ark_diag screen: 模拟器没开机 → E_CONNECT，提示 emulatorAction=start', async () => {
+  const { byName } = makeHarness({ detect: makeDetect({ emulator: { androidStarted: false } }) });
+  const text = toolText(await byName.ark_diag.execute({ action: 'screen' }));
+  assert.match(text, /排查动作 screen 失败。/);
   assert.match(text, /E_CONNECT/);
   assert.match(text, /模拟器没有开机/);
+  assert.match(text, /emulatorAction=start/);
 });
 
-test('ark_screen: screencap 返回的不是 PNG → E_CONNECT', async () => {
+test('ark_diag screen: screencap 返回的不是 PNG → E_CONNECT + 可执行提示', async () => {
   const shotDir = await makeTmp('dsh-ark-preset-shot-junk-');
   const { run } = makeRun();
   run.cliBuffer = async () => ({ ok: true, buffer: Buffer.from('not-a-png'), stderr: 'junk' });
@@ -502,22 +417,97 @@ test('ark_screen: screencap 返回的不是 PNG → E_CONNECT', async () => {
     detect: makeDetect({ emulator: { androidStarted: true } }),
     run,
   });
-  const text = toolText(await byName.ark_screen.execute({}));
+  const text = toolText(await byName.ark_diag.execute({ action: 'screen' }));
   assert.match(text, /E_CONNECT/);
   assert.match(text, /screencap 没拿到有效 PNG/);
   assert.match(text, /建议：/);
+  assert.equal((await fs.readdir(shotDir)).length, 0, '失败时不应留下文件');
 });
 
-test('ark_screen: 没找到 adb 时给提示（不抛）', async () => {
+test('ark_diag screen: 没找到 adb 时给试过的路径与 probe 建议（不抛）', async () => {
   const { byName } = makeHarness({ detect: makeDetect({ adbPath: '', adbTried: ['C:\\adb.exe'] }) });
-  const text = toolText(await byName.ark_screen.execute({}));
+  const text = toolText(await byName.ark_diag.execute({ action: 'screen' }));
   assert.match(text, /没找到 adb，抓不了图。/);
   assert.match(text, /试过：C:\\adb\.exe/);
+  assert.match(text, /action=probe/);
 });
 
-// —— 5. ark_device ——
+// ============================================================
+// 3. ark_diag — logs
+// ============================================================
 
-test('ark_device: 读出分辨率/机型/前台，游戏在前台', async () => {
+/** 写一份混合级别的 MAA 日志，返回路径。 */
+async function writeSampleLog() {
+  const dir = await makeTmp('dsh-ark-preset-log-');
+  const file = path.join(dir, 'asst.log');
+  await fs.writeFile(file, [
+    '[2026-10-28 10:00:00.000][INF][Px1] start up',
+    '[2026-10-28 10:00:01.000][WRN][Px1] warn one',
+    '[2026-10-28 10:00:02.000][ERR][Px1] err one',
+    '[2026-10-28 10:00:03.000][INF][Px1] middle line',
+    '[2026-10-28 10:00:04.000][FTL][Px1] fatal one',
+  ].join('\n') + '\n', 'utf8');
+  return file;
+}
+
+test('ark_diag logs: 默认取最后 N 行', async () => {
+  const file = await writeSampleLog();
+  const { byName } = makeHarness({ config: { logFile: file } });
+  const text = toolText(await byName.ark_diag.execute({ action: 'logs', lines: 2 }));
+  assert.match(text, /筛选：all · 窗口最后 400 行内匹配 5 行 · 显示 2 行/);
+  assert.match(text, /middle line/);
+  assert.match(text, /fatal one/);
+  assert.doesNotMatch(text, /warn one/);
+  assert.doesNotMatch(text, /err one/);
+});
+
+test('ark_diag logs: level=error 只留 ERR/FTL', async () => {
+  const file = await writeSampleLog();
+  const { byName } = makeHarness({ config: { logFile: file } });
+  const text = toolText(await byName.ark_diag.execute({ action: 'logs', level: 'error' }));
+  assert.match(text, /筛选：error · 窗口最后 400 行内匹配 2 行 · 显示 2 行/);
+  assert.match(text, /err one/);
+  assert.match(text, /fatal one/);
+  assert.doesNotMatch(text, /warn one/);
+  assert.doesNotMatch(text, /middle line/);
+});
+
+test('ark_diag logs: level=warn 留 WRN/ERR/FTL', async () => {
+  const file = await writeSampleLog();
+  const { byName } = makeHarness({ config: { logFile: file } });
+  const text = toolText(await byName.ark_diag.execute({ action: 'logs', level: 'warn' }));
+  assert.match(text, /筛选：warn · 窗口最后 400 行内匹配 3 行 · 显示 3 行/);
+  assert.match(text, /warn one/);
+  assert.match(text, /err one/);
+  assert.match(text, /fatal one/);
+  assert.doesNotMatch(text, /start up/);
+});
+
+test('ark_diag logs: 日志不存在时给路径与修复建议', async () => {
+  const dir = await makeTmp('dsh-ark-preset-log-missing-');
+  const file = path.join(dir, 'no-such-asst.log');
+  const { byName } = makeHarness({ config: { logFile: file } });
+  const text = toolText(await byName.ark_diag.execute({ action: 'logs' }));
+  assert.match(text, /E_BAD_ARGS/);
+  assert.match(text, /还没有日志文件：/);
+  assert.match(text, /建议：/);
+  assert.match(text, /ark_fight 会启动侧车/);
+});
+
+test('readLogWindow: 只取窗口内最后 N 行', async () => {
+  const dir = await makeTmp('dsh-ark-preset-log-window-');
+  const file = path.join(dir, 'asst.log');
+  await fs.writeFile(file, Array.from({ length: 10 }, (_, index) => `line ${index + 1}`).join('\n') + '\n', 'utf8');
+  const window = await readLogWindow(file, 3);
+  assert.deepEqual(window.lines, ['line 8', 'line 9', 'line 10']);
+  assert.equal(window.truncated, false);
+});
+
+// ============================================================
+// 4. ark_diag — device
+// ============================================================
+
+test('ark_diag device: 读出分辨率/机型/前台，游戏在前台', async () => {
   const { adb, calls } = makeAdbRouter({
     'wm size': () => ({ ok: true, stdout: 'Physical size: 1920x1080\nOverride size: 1920x1080\n', stderr: '' }),
     getprop: () => ({ ok: true, stdout: 'MuMu 12\n', stderr: '' }),
@@ -532,7 +522,7 @@ test('ark_device: 读出分辨率/机型/前台，游戏在前台', async () => 
     detect: makeDetect({ emulator: { managerFound: true, androidStarted: true, adbOnline: true } }),
     run,
   });
-  const text = toolText(await byName.ark_device.execute());
+  const text = toolText(await byName.ark_diag.execute({ action: 'device' }));
   assert.match(text, /adb：adb · 设备 127\.0\.0\.1:16384 · 在线/);
   assert.match(text, /分辨率：1920x1080/);
   assert.match(text, /机型：MuMu 12/);
@@ -546,7 +536,7 @@ test('ark_device: 读出分辨率/机型/前台，游戏在前台', async () => 
   ]);
 });
 
-test('ark_device: 非 16:9 分辨率给警告', async () => {
+test('ark_diag device: 非 16:9 分辨率给警告', async () => {
   const { adb } = makeAdbRouter({
     'wm size': () => ({ ok: true, stdout: 'Physical size: 1280x800\n', stderr: '' }),
     getprop: () => ({ ok: true, stdout: 'MuMu\n', stderr: '' }),
@@ -556,24 +546,39 @@ test('ark_device: 非 16:9 分辨率给警告', async () => {
     detect: makeDetect({ emulator: { managerFound: true, androidStarted: true, adbOnline: true } }),
     run: { ...makeRun().run, adb },
   });
-  const text = toolText(await byName.ark_device.execute());
+  const text = toolText(await byName.ark_diag.execute({ action: 'device' }));
   assert.match(text, /分辨率：1280x800/);
   assert.match(text, /⚠️ 当前不是 16:9 分辨率/);
   assert.match(text, /1920×1080/);
 });
 
-test('ark_device: adb 离线时打印建议块且不跑任何 adb 命令', async () => {
+test('ark_diag device: adb 离线时打印建议块且不跑任何 adb 命令', async () => {
   const { adb, calls } = makeAdbRouter({});
-  const { byName } = makeHarness({
-    detect: makeDetect({ emulator: { managerFound: true, adbOnline: false, name: 'MuMu-12' } }),
-    run: { ...makeRun().run, adb },
-  });
-  const text = toolText(await byName.ark_device.execute());
+  const detect = makeDetect({ emulator: { managerFound: true, adbOnline: false, name: 'MuMu-12' } });
+  const { byName } = makeHarness({ detect, run: { ...makeRun().run, adb } });
+  const text = toolText(await byName.ark_diag.execute({ action: 'device' }));
   assert.match(text, /adb：adb · 设备 127\.0\.0\.1:16384 · 离线/);
   assert.match(text, /模拟器：未开机（MuMu-12 #0）/);
   assert.match(text, /结论：adb 不可用/);
-  assert.match(text, /建议：① ark_emulator start/);
+  assert.match(text, /ark_diag action=emulator emulatorAction=start/);
   assert.equal(calls.length, 0);
+  assert.equal(detect.calls[0].fresh, true, 'device 应强制重探（fresh=true）');
+});
+
+test('ark_diag device: wm size 报竖屏 16:9 时不误报（MAA 以实际截图分辨率为准）', async () => {
+  const { adb } = makeAdbRouter({
+    'wm size': () => ({ ok: true, stdout: 'Physical size: 1080x1920\n', stderr: '' }),
+    getprop: () => ({ ok: true, stdout: 'MuMu\n', stderr: '' }),
+    dumpsys: () => ({ ok: true, stdout: '  ResumedActivity: ActivityRecord{abc u0 com.hypergryph.arknights/com.u8.sdk.U8UnityContext t1}\n', stderr: '' }),
+  });
+  const { byName } = makeHarness({
+    detect: makeDetect({ emulator: { managerFound: true, androidStarted: true, adbOnline: true } }),
+    run: { ...makeRun().run, adb },
+  });
+  const text = toolText(await byName.ark_diag.execute({ action: 'device' }));
+  assert.match(text, /分辨率：1080x1920/);
+  assert.match(text, /是竖屏尺寸；旋转后实际为横屏 16:9/);
+  assert.doesNotMatch(text, /⚠️ 当前不是 16:9/);
 });
 
 test('device 解析函数：parseWmSize / parseForeground / is169', () => {
@@ -594,12 +599,107 @@ test('device 解析函数：parseWmSize / parseForeground / is169', () => {
 
   assert.equal(is169('1920x1080'), true);
   assert.equal(is169('2560x1440'), true);
+  assert.equal(is169('1080x1920'), true, '竖屏报告也按横屏 16:9 计算');
   assert.equal(is169('1280x800'), false);
   assert.equal(is169('1600x1000'), false);
+  assert.equal(is169('800x1280'), false);
   assert.equal(is169('not-a-resolution'), true);
 });
 
-// —— 6. ark_game ——
+// ============================================================
+// 5. ark_diag — emulator
+// ============================================================
+
+test('renderEmulatorStatus: 渲染实例/三态/地址/错误码', () => {
+  const text = renderEmulatorStatus({
+    vmIndex: 1,
+    address: '127.0.0.1:16384',
+    managerPath: 'C:\\MuMu\\MuMuManager.exe',
+    vmConfig: { width: 1920, height: 1080 },
+    emulator: {
+      name: 'MuMu-12',
+      running: true,
+      androidStarted: true,
+      adbOnline: true,
+      errorCode: 5,
+    },
+  });
+  assert.match(text, /实例：#1 MuMu-12/);
+  assert.match(text, /进程：运行中 · 安卓：已启动 · adb：在线/);
+  assert.match(text, /adb 地址：127\.0\.0\.1:16384 · 分辨率 1920×1080/);
+  assert.match(text, /MuMuManager：C:\\MuMu\\MuMuManager\.exe/);
+  assert.match(text, /MuMu 错误码：5/);
+});
+
+test('ark_diag emulator: status 走 detect，stop 调 MuMuManager shutdown', async () => {
+  const { run, calls } = makeRun();
+  const { byName } = makeHarness({
+    detect: makeDetect({
+      managerPath: 'C:\\MuMu\\MuMuManager.exe',
+      emulator: { managerFound: true, running: true, androidStarted: true, adbOnline: true, name: 'MuMu-12' },
+    }),
+    run,
+  });
+  const status = toolText(await byName.ark_diag.execute({ action: 'emulator' }));
+  assert.match(status, /实例：#0 MuMu-12/);
+  assert.match(status, /进程：运行中/);
+
+  const stop = toolText(await byName.ark_diag.execute({ action: 'emulator', emulatorAction: 'stop' }));
+  assert.match(stop, /已发送关闭指令（实例 #0）。/);
+  assert.deepEqual(calls.cli[0], [
+    'C:\\MuMu\\MuMuManager.exe',
+    ['control', '-v', '0', 'shutdown'],
+    { timeoutMs: 30000 },
+  ]);
+});
+
+test('ark_diag emulator: 已开机时 start 不发 launch 指令', async () => {
+  const { run, calls } = makeRun();
+  const { byName } = makeHarness({
+    detect: makeDetect({
+      managerPath: 'C:\\MuMu\\MuMuManager.exe',
+      emulator: { managerFound: true, running: true, androidStarted: true, adbOnline: true },
+    }),
+    run,
+  });
+  const text = toolText(await byName.ark_diag.execute({ action: 'emulator', emulatorAction: 'start' }));
+  assert.match(text, /模拟器已经开机/);
+  assert.equal(calls.cli.length, 0);
+});
+
+test('ark_diag emulator: 未开机时 start 发 launch 并等安卓启动', async () => {
+  const { run, calls } = makeRun();
+  const sleeps = [];
+  const { byName } = makeHarness({
+    detect: makeDetect(
+      { managerPath: 'C:\\MuMu\\MuMuManager.exe', emulator: { managerFound: true, running: false, androidStarted: false } },
+      { managerPath: 'C:\\MuMu\\MuMuManager.exe', emulator: { managerFound: true, running: true, androidStarted: true, adbOnline: true, name: 'MuMu-12' } },
+    ),
+    run,
+    sleep: async (ms) => { sleeps.push(ms); },
+  });
+  const text = toolText(await byName.ark_diag.execute({ action: 'emulator', emulatorAction: 'start' }));
+  assert.match(text, /模拟器已开机（用时约 \d+s）。/);
+  assert.equal(calls.cli.length, 1);
+  assert.deepEqual(calls.cli[0][1], ['control', '-v', '0', 'launch']);
+  assert.deepEqual(sleeps, [3000], '启动轮询步长应为 3s');
+});
+
+test('ark_diag emulator: 找不到 MuMuManager / 非法 emulatorAction 都给明确错误', async () => {
+  const notFound = toolText(await makeHarness({ detect: makeDetect({ managerPath: '' }) }).byName.ark_diag.execute({ action: 'emulator' }));
+  assert.match(notFound, /E_EMULATOR_NOT_FOUND/);
+  assert.match(notFound, /没找到 MuMuManager\.exe。/);
+
+  const badAction = toolText(await makeHarness({
+    detect: makeDetect({ managerPath: 'C:\\MuMu\\MuMuManager.exe' }),
+  }).byName.ark_diag.execute({ action: 'emulator', emulatorAction: 'reboot' }));
+  assert.match(badAction, /E_BAD_ARGS/);
+  assert.match(badAction, /emulatorAction 只能是 status \/ start \/ stop/);
+});
+
+// ============================================================
+// 6. ark_diag — game
+// ============================================================
 
 test('resolveGameTarget: 优先 MAA config.json，缺省回退官方包名', async () => {
   const target = await resolveGameTarget(MAA_ROOT, 'Official');
@@ -620,186 +720,189 @@ test('resolveGameTarget: 优先 MAA config.json，缺省回退官方包名', asy
   assert.equal(parseStartComponent('no component here'), null);
 });
 
-test('ark_game: start/stop 传对 adb 参数', async () => {
+test('ark_diag game: start/stop 传对 adb 参数', async () => {
   const { adb, calls } = makeAdbRouter({});
   const { byName } = makeHarness({
     detect: makeDetect({ emulator: { managerFound: true, androidStarted: true, adbOnline: true } }),
     run: { ...makeRun().run, adb },
   });
-  const start = toolText(await byName.ark_game.execute({ action: 'start' }));
+  const start = toolText(await byName.ark_diag.execute({ action: 'game', gameAction: 'start' }));
   assert.match(start, /已发送启动：com\.hypergryph\.arknights\/com\.u8\.sdk\.U8UnityContext/);
   assert.match(start, /（包名来自 MAA config\.json）/);
   assert.deepEqual(calls.at(-1).command, [
     'shell', 'am', 'start', '-n', 'com.hypergryph.arknights/com.u8.sdk.U8UnityContext',
   ]);
 
-  const stop = toolText(await byName.ark_game.execute({ action: 'stop' }));
+  const stop = toolText(await byName.ark_diag.execute({ action: 'game', gameAction: 'stop' }));
   assert.match(stop, /已强制关闭 com\.hypergryph\.arknights。/);
   assert.deepEqual(calls.at(-1).command, ['shell', 'am', 'force-stop', 'com.hypergryph.arknights']);
 });
 
-test('ark_game: adb 离线 → E_CONNECT，非法 action → E_BAD_ARGS', async () => {
+test('ark_diag game: 缺 gameAction / 非法 gameAction / adb 离线都给明确错误', async () => {
+  const online = makeHarness({ detect: makeDetect({ emulator: { adbOnline: true } }) });
+  const missing = toolText(await online.byName.ark_diag.execute({ action: 'game' }));
+  assert.match(missing, /E_BAD_ARGS/);
+  assert.match(missing, /必须显式给 gameAction=start 或 stop/);
+
+  const bad = toolText(await online.byName.ark_diag.execute({ action: 'game', gameAction: 'reboot' }));
+  assert.match(bad, /E_BAD_ARGS/);
+
   const offline = makeHarness({ detect: makeDetect({ emulator: { adbOnline: false } }) });
-  const failText = toolText(await offline.byName.ark_game.execute({ action: 'start' }));
+  const failText = toolText(await offline.byName.ark_diag.execute({ action: 'game', gameAction: 'start' }));
   assert.match(failText, /E_CONNECT/);
   assert.match(failText, /adb 不在线/);
-
-  const online = makeHarness({ detect: makeDetect({ emulator: { adbOnline: true } }) });
-  const badText = toolText(await online.byName.ark_game.execute({ action: 'reboot' }));
-  assert.match(badText, /E_BAD_ARGS/);
-  assert.match(badText, /action 只能是 start 或 stop/);
 });
 
-// —— 7. ark_emulator ——
+// ============================================================
+// 7. ark_diag — probe
+// ============================================================
 
-test('renderStatus: 渲染实例/三态/地址/错误码', () => {
-  const text = renderStatus({
-    vmIndex: 1,
-    address: '127.0.0.1:16384',
-    managerPath: 'C:\\MuMu\\MuMuManager.exe',
-    vmConfig: { width: 1920, height: 1080 },
-    emulator: {
-      name: 'MuMu-12',
-      running: true,
-      androidStarted: true,
-      adbOnline: true,
-      errorCode: 5,
-    },
+test('ark_diag probe: 强制重探（fresh + includePython）并列出 MAA/Python/MuMu/adb 与结论', async () => {
+  const detect = makeDetect({
+    maaPath: MAA_ROOT,
+    pythonPath: 'C:\\py\\python.exe',
+    pythonVersion: '3.12.14',
+    pythonTried: ['C:\\py\\python.exe'],
+    mumuInstallPath: 'C:\\MuMu',
+    managerPath: 'C:\\MuMu\\shell\\MuMuManager.exe',
+    adbPath: 'C:\\adb.exe',
+    emulator: { managerFound: true, running: true, androidStarted: true, adbOnline: true, name: 'MuMu-12' },
   });
-  assert.match(text, /实例：#1 MuMu-12/);
-  assert.match(text, /进程：运行中 · 安卓：已启动 · adb：在线/);
-  assert.match(text, /adb 地址：127\.0\.0\.1:16384 · 分辨率 1920×1080/);
-  assert.match(text, /MuMuManager：C:\\MuMu\\MuMuManager\.exe/);
-  assert.match(text, /MuMu 错误码：5/);
+  const { byName } = makeHarness({ detect });
+  const text = toolText(await byName.ark_diag.execute({ action: 'probe' }));
+  assert.equal(detect.calls.length, 1);
+  assert.equal(detect.calls[0].fresh, true);
+  assert.equal(detect.calls[0].includePython, true);
+  assert.match(text, /环境探测（只读/);
+  assert.match(text, /MAA：/);
+  assert.match(text, /资源：resource\/stages\.json 存在/);
+  assert.match(text, /Python：C:\\py\\python\.exe（3\.12\.14）/);
+  assert.match(text, /MuMu：C:\\MuMu/);
+  assert.match(text, /MuMuManager：C:\\MuMu\\shell\\MuMuManager\.exe/);
+  assert.match(text, /adb：C:\\adb\.exe · 设备 127\.0\.0\.1:16384 · 在线/);
+  assert.match(text, /结论：链路探测全部通过/);
 });
 
-test('ark_emulator: status 走 detect，stop 调 MuMuManager shutdown', async () => {
-  const { run, calls } = makeRun();
-  const { byName } = makeHarness({
-    detect: makeDetect({
-      managerPath: 'C:\\MuMu\\MuMuManager.exe',
-      emulator: { managerFound: true, running: true, androidStarted: true, adbOnline: true, name: 'MuMu-12' },
-    }),
-    run,
+test('ark_diag probe: 缺项时逐条给修复建议', async () => {
+  const detect = makeDetect({
+    maaPath: '',
+    maaTried: ['C:\\A\\MaaCore.dll', 'C:\\B\\MaaCore.dll'],
+    pythonPath: '',
+    pythonTried: ['C:\\py\\python.exe'],
+    mumuInstallPath: '',
+    managerPath: '',
+    mumuTried: ['C:\\MuMu'],
+    adbPath: '',
+    adbTried: ['C:\\adb.exe'],
   });
-  const status = toolText(await byName.ark_emulator.execute({ action: 'status' }));
-  assert.match(status, /实例：#0 MuMu-12/);
-  assert.match(status, /进程：运行中/);
-
-  const stop = toolText(await byName.ark_emulator.execute({ action: 'stop' }));
-  assert.match(stop, /已发送关闭指令（实例 #0）。/);
-  assert.deepEqual(calls.cli[0], [
-    'C:\\MuMu\\MuMuManager.exe',
-    ['control', '-v', '0', 'shutdown'],
-    { timeoutMs: 30000 },
-  ]);
+  const { byName } = makeHarness({ detect });
+  const text = toolText(await byName.ark_diag.execute({ action: 'probe' }));
+  assert.match(text, /MAA：未找到/);
+  assert.match(text, /试过：C:\\A\\MaaCore\.dll；C:\\B\\MaaCore\.dll/);
+  assert.match(text, /Python：未找到/);
+  assert.match(text, /MuMu：未找到/);
+  assert.match(text, /adb：未找到/);
+  assert.match(text, /结论：有未通过项/);
+  assert.match(text, /写 maaPath/);
+  assert.match(text, /写 mumuInstallPath/);
+  assert.match(text, /写 adbPath/);
 });
 
-test('ark_emulator: 已开机时 start 不发 launch 指令', async () => {
-  const { run, calls } = makeRun();
-  const { byName } = makeHarness({
-    detect: makeDetect({
-      managerPath: 'C:\\MuMu\\MuMuManager.exe',
-      emulator: { managerFound: true, running: true, androidStarted: true, adbOnline: true },
-    }),
-    run,
-  });
-  const text = toolText(await byName.ark_emulator.execute({ action: 'start' }));
-  assert.match(text, /模拟器已经开机。/);
-  assert.equal(calls.cli.length, 0);
-});
-
-test('ark_emulator: 未开机时 start 发 launch 并等到安卓启动（≈3s 轮询）', async () => {
-  const { run, calls } = makeRun();
-  const { deps, byName } = makeHarness({
-    detect: makeDetect(
-      { managerPath: 'C:\\MuMu\\MuMuManager.exe', emulator: { managerFound: true, running: false, androidStarted: false } },
-      { managerPath: 'C:\\MuMu\\MuMuManager.exe', emulator: { managerFound: true, running: true, androidStarted: true, adbOnline: true, name: 'MuMu-12' } },
-    ),
-    run,
-  });
-  // 只保留一次轮询（真实 sleep 仍是 3s，避免第二个 3s 周期）
-  deps.config.launchTimeoutMs = 100;
-  const text = toolText(await byName.ark_emulator.execute({ action: 'start' }));
-  assert.match(text, /模拟器已开机（用时约 \d+s）。/);
-  assert.equal(calls.cli.length, 1);
-  assert.deepEqual(calls.cli[0][1], ['control', '-v', '0', 'launch']);
-});
-
-test('ark_emulator: 找不到 MuMuManager / 非法 action 都给明确错误', async () => {
-  const notFound = toolText(await makeHarness({ detect: makeDetect({ managerPath: '' }) }).byName.ark_emulator.execute({ action: 'status' }));
-  assert.match(notFound, /E_EMULATOR_NOT_FOUND/);
-  assert.match(notFound, /没找到 MuMuManager\.exe。/);
-
-  const badAction = toolText(await makeHarness({
-    detect: makeDetect({ managerPath: 'C:\\MuMu\\MuMuManager.exe' }),
-  }).byName.ark_emulator.execute({ action: 'reboot' }));
-  assert.match(badAction, /E_BAD_ARGS/);
-  assert.match(badAction, /action 只能是 status \/ start \/ stop/);
-});
-
-// —— 8. ark_log ——
-
-/** 写一份混合级别的 MAA 日志，返回路径。 */
-async function writeSampleLog() {
-  const dir = await makeTmp('dsh-ark-preset-log-');
-  const file = path.join(dir, 'asst.log');
-  await fs.writeFile(file, [
-    '[2026-10-28 10:00:00.000][INF][Px1] start up',
-    '[2026-10-28 10:00:01.000][WRN][Px1] warn one',
-    '[2026-10-28 10:00:02.000][ERR][Px1] err one',
-    '[2026-10-28 10:00:03.000][INF][Px1] middle line',
-    '[2026-10-28 10:00:04.000][FTL][Px1] fatal one',
-  ].join('\n') + '\n', 'utf8');
-  return file;
-}
-
-test('ark_log: 默认取最后 N 行', async () => {
-  const file = await writeSampleLog();
-  const { byName } = makeHarness({ config: { logFile: file } });
-  const text = toolText(await byName.ark_log.execute({ lines: 2 }));
-  assert.match(text, /筛选：all · 匹配 5 行 · 显示最后 2 行/);
-  assert.match(text, /middle line/);
-  assert.match(text, /fatal one/);
-  assert.doesNotMatch(text, /warn one/);
-  assert.doesNotMatch(text, /err one/);
-});
-
-test('ark_log: level=error 只留 ERR/FTL', async () => {
-  const file = await writeSampleLog();
-  const { byName } = makeHarness({ config: { logFile: file } });
-  const text = toolText(await byName.ark_log.execute({ level: 'error' }));
-  assert.match(text, /筛选：error · 匹配 2 行 · 显示最后 2 行/);
-  assert.match(text, /err one/);
-  assert.match(text, /fatal one/);
-  assert.doesNotMatch(text, /warn one/);
-  assert.doesNotMatch(text, /middle line/);
-});
-
-test('ark_log: level=warn 留 WRN/ERR/FTL', async () => {
-  const file = await writeSampleLog();
-  const { byName } = makeHarness({ config: { logFile: file } });
-  const text = toolText(await byName.ark_log.execute({ level: 'warn' }));
-  assert.match(text, /筛选：warn · 匹配 3 行 · 显示最后 3 行/);
-  assert.match(text, /warn one/);
-  assert.match(text, /err one/);
-  assert.match(text, /fatal one/);
-  assert.doesNotMatch(text, /start up/);
-});
-
-test('ark_log: 日志不存在时给路径与修复建议', async () => {
-  const dir = await makeTmp('dsh-ark-preset-log-missing-');
-  const file = path.join(dir, 'no-such-asst.log');
-  const { byName } = makeHarness({ config: { logFile: file } });
-  const text = toolText(await byName.ark_log.execute({}));
-  assert.match(text, /读取日志失败。/);
+test('ark_diag: 未知 / 缺失 action 给 E_BAD_ARGS 与六个合法值', async () => {
+  const { byName } = makeHarness();
+  const text = toolText(await byName.ark_diag.execute({ action: 'reboot' }));
   assert.match(text, /E_BAD_ARGS/);
-  assert.match(text, /还没有日志文件：/);
-  assert.match(text, /建议：/);
-  assert.match(text, /ark_fight 会启动侧车/);
+  assert.match(text, /action 只能是 screen \/ logs \/ device \/ emulator \/ game \/ probe/);
 });
 
-// —— 9. installGlobalToolMask ——
+// ============================================================
+// 8. ark_solutions
+// ============================================================
+
+test('ark_solutions: 行含 id/评分/干员需求/is_raid/难度 与可复制的 ark_fight 调用串', async () => {
+  const copilot = makeSolutionsCopilot(SOLUTIONS, 2);
+  const { byName } = makeHarness({ copilot });
+  const text = toolText(await byName.ark_solutions.execute({ stage: '5-10' }));
+  assert.match(text, /5-10 的作业（站上共 2 份，当前难度档匹配 2 份，显示 2 条）：/);
+  assert.match(text, /- id=104178 · 评分 9\/10（好评） · 干员需求 2 · is_raid=否 · 难度=标准\/常规 · 热度 12\.3/);
+  assert.match(text, /五人速刷 — 博士A/);
+  assert.match(text, /需要：德克萨斯、能天使/);
+  assert.match(text, /- id=205500 · 评分 3\/10 · 干员需求 0 · is_raid=是 · 难度=磨难\/险地 · 热度 1\.5/);
+  assert.match(text, /磨难解法/);
+  assert.match(text, /用它打：ark_fight stages=5-10 copilotId=104178 confirm=true/);
+  assert.match(text, /（作业站列表接口的内容是截断版，真正执行时全局 ark_fight 会按 id 取完整作业）/);
+  assert.deepEqual(copilot.calls.query, ['5-10']);
+  assert.equal(copilot.calls.pick.length, 1);
+  assert.equal(copilot.calls.pick[0].code, '5-10');
+  assert.equal(copilot.calls.pick[0].difficulty, 'auto');
+});
+
+test('ark_solutions: difficulty=tough 时调用串带 difficulty 且标磨难/险地', async () => {
+  const copilot = makeSolutionsCopilot([SOLUTIONS[1]], 1);
+  const { byName } = makeHarness({ copilot });
+  const text = toolText(await byName.ark_solutions.execute({ stage: '5-10', difficulty: 'tough' }));
+  assert.match(text, /磨难\/险地档匹配 1 份，显示 1 条/);
+  assert.match(text, /is_raid=是 · 难度=磨难\/险地/);
+  assert.match(text, /用它打：ark_fight stages=5-10 difficulty=tough copilotId=205500 confirm=true/);
+  assert.equal(copilot.calls.pick[0].difficulty, 'tough');
+});
+
+test('ark_solutions: minRating 过滤作业；全被过滤时给 file= 备用', async () => {
+  const { byName } = makeHarness({ copilot: makeSolutionsCopilot(SOLUTIONS, 2) });
+  const filtered = toolText(await byName.ark_solutions.execute({ stage: '5-10', minRating: 5 }));
+  assert.match(filtered, /id=104178/);
+  assert.doesNotMatch(filtered, /id=205500/);
+
+  const none = toolText(await byName.ark_solutions.execute({ stage: '5-10', minRating: 10 }));
+  assert.match(none, /匹配到的作业评分都低于 minRating=10/);
+  assert.match(none, /备用：ark_fight stages=5-10 file=<本地作业 JSON> confirm=true/);
+  assert.doesNotMatch(none, /copilotId=/);
+});
+
+test('ark_solutions: 作业站没有作业时给原因与多条出路', async () => {
+  const { byName } = makeHarness({
+    copilot: makeSolutionsCopilot([], 0, '作业站返回 HTTP 503'),
+  });
+  const text = toolText(await byName.ark_solutions.execute({ stage: '5-10' }));
+  assert.match(text, /作业站上没查到「5-10」的作业（作业站返回 HTTP 503）。/);
+  assert.match(text, /用 file= 传本地作业 JSON/);
+  assert.match(text, /copilotId= 直接指定/);
+});
+
+test('ark_solutions: 没找到 MAA / 关卡代码不认识都给可执行提示', async () => {
+  const noMaa = makeHarness({
+    detect: makeDetect({ maaPath: '', maaTried: ['C:\\A\\MaaCore.dll'] }),
+  });
+  const text = toolText(await noMaa.byName.ark_solutions.execute({ stage: '5-10' }));
+  assert.match(text, /没找到 MAA（MaaCore\.dll），没法解析关卡代码。/);
+  assert.match(text, /试过：C:\\A\\MaaCore\.dll/);
+  assert.match(text, /action=probe/);
+
+  const harness = makeHarness();
+  const unknown = toolText(await harness.byName.ark_solutions.execute({ stage: 'ZZZ-9' }));
+  assert.match(unknown, /查不到关卡「ZZZ-9」/);
+  assert.match(unknown, /ark_data\(kind=stage/);
+});
+
+test('ark_solutions: 空白 stage 直接 E_BAD_ARGS', async () => {
+  const { byName } = makeHarness();
+  const text = toolText(await byName.ark_solutions.execute({ stage: '   ' }));
+  assert.match(text, /E_BAD_ARGS/);
+  assert.match(text, /stage 不能为空/);
+});
+
+test('solutions 纯函数：difficultyLabel / isRaidSolution', () => {
+  assert.equal(difficultyLabel('auto'), '当前难度');
+  assert.equal(difficultyLabel('easy'), '标准/常规');
+  assert.equal(difficultyLabel('tough'), '磨难/险地');
+  assert.equal(isRaidSolution({ mentionsRaid: true }), true);
+  assert.equal(isRaidSolution({ stageName: 'tough_05-10' }), true);
+  assert.equal(isRaidSolution({ mentionsRaid: false, stageName: 'main_05-10' }), false);
+});
+
+// ============================================================
+// 9. installGlobalToolMask
+// ============================================================
 
 /**
  * 造一个假的插件上下文（tools / effect / logger）。
@@ -935,16 +1038,158 @@ test('installGlobalToolMask: 2s 补屏蔽定时器 unref，不会吊住 Node 进
   }
 });
 
-// —— 10. 预设/全局工具互不重叠 ——
+// ============================================================
+// 10. apply / 激活报告 / 配置
+// ============================================================
 
-test('preset/global: 7 个预设工具与 5 个全局工具互不重叠，并集 12 个', () => {
-  const presetNames = makeHarness().tools.map((tool) => tool.name);
-  const globalTools = createToolDefinitions({ actions: {} });
-  const globalNames = globalTools.map((tool) => tool.name);
-  assert.deepEqual(globalNames, ['ark_status', 'ark_fight', 'ark_push', 'ark_rogue', 'ark_stop']);
-  assert.equal(new Set([...presetNames, ...globalNames]).size, 12);
-  for (const name of presetNames) {
-    assert.equal(globalNames.includes(name), false, `${name} 不应同时出现在全局工具表`);
+/**
+ * 造一个 apply 用的假上下文（工具注册 + 屏蔽 + 日志）。
+ * @param {{ registerThrows?: boolean }} [options] - 行为开关。
+ * @returns {{ ctx: Record<string, any>, registered: Map<string, any>, restrictions: any[], effects: any[] }} 结果。
+ */
+function makeApplyCtx(options = {}) {
+  const registered = new Map();
+  const restrictions = [];
+  const effects = [];
+  const ctx = {
+    logger: { info() {}, warn() {} },
+    effect: (callback) => {
+      const disposer = callback();
+      effects.push(disposer);
+      return disposer;
+    },
+    tools: {
+      register(definition) {
+        if (options.registerThrows === true) throw new Error('register boom');
+        registered.set(definition.name, definition);
+        return () => registered.delete(definition.name);
+      },
+      schemas: () => [
+        { name: 'ark_diag' },
+        { name: 'ark_solutions' },
+        { name: 'steam_x' },
+        { name: 'run_code' },
+      ],
+      restrict(restriction) {
+        restrictions.push(restriction);
+        return () => {};
+      },
+    },
+  };
+  return { ctx, registered, restrictions, effects };
+}
+
+test('apply: 注册 2 个工具、写 ok:true 激活报告、屏蔽无关工具', async () => {
+  const reportFile = path.join(await makeTmp('dsh-ark-preset-report-'), 'activation.json');
+  const { ctx, registered, restrictions, effects } = makeApplyCtx();
+  try {
+    await apply(ctx, {}, {
+      detect: makeDetect({}),
+      run: makeRun().run,
+      copilot: makeSolutionsCopilot([]),
+      reportFile,
+    });
+    assert.deepEqual([...registered.keys()], ['ark_diag', 'ark_solutions']);
+    assert.deepEqual(restrictions.at(-1).deny, ['steam_x'], '只屏蔽白名单之外的工具（run_code 保留）');
+
+    const report = JSON.parse(await fs.readFile(reportFile, 'utf8'));
+    assert.equal(report.presetVersion, PRESET_VERSION);
+    assert.equal(report.presetVersion, '1.0.0');
+    assert.equal(report.ok, true);
+    assert.deepEqual(report.tools, ['ark_diag', 'ark_solutions']);
+    assert.deepEqual(report.allowGlobalToolPrefixes, ['ark_', 'prts_', 'input_']);
+    assert.deepEqual(report.maskedGlobals, ['steam_x']);
+    assert.equal(typeof report.at, 'string');
+  } finally {
+    disposeAll(effects);
   }
-  assert.deepEqual([...new Set(presetNames)], PRESET_TOOL_NAMES);
+});
+
+test('apply: 注册失败时写 ok:false 现场并重新抛出', async () => {
+  const reportFile = path.join(await makeTmp('dsh-ark-preset-report-fail-'), 'activation.json');
+  const { ctx, effects } = makeApplyCtx({ registerThrows: true });
+  try {
+    await assert.rejects(
+      () => apply(ctx, {}, {
+        detect: makeDetect({}),
+        run: makeRun().run,
+        copilot: makeSolutionsCopilot([]),
+        reportFile,
+      }),
+      /register boom/,
+    );
+    const report = JSON.parse(await fs.readFile(reportFile, 'utf8'));
+    assert.equal(report.ok, false);
+    assert.match(report.error, /register boom/);
+    assert.deepEqual(report.tools, []);
+  } finally {
+    disposeAll(effects);
+  }
+});
+
+test('writeActivationReport: 显式 file 写 JSON；无显式 file 时测试环境跳过', () => {
+  const file = path.join(os.tmpdir(), `dsh-ark-preset-report-direct-${Date.now()}.json`);
+  const written = writeActivationReport({ ok: true, tools: ['ark_diag'] }, { file });
+  assert.equal(written, file);
+  assert.equal(typeof written, 'string');
+  const skipped = writeActivationReport({ ok: true }, {});
+  assert.equal(skipped, null, 'node --test 下（NODE_TEST_CONTEXT）不应覆盖真实激活现场');
+});
+
+test('config: 默认值、范围夹紧、白名单去重', () => {
+  const config = normalizePresetConfig({});
+  assert.equal(config.maaPath, '');
+  assert.equal(config.pythonPath, '');
+  assert.equal(config.clientType, 'Official');
+  assert.equal(config.maxScreenshots, 20);
+  assert.equal(config.maxLogLines, 400);
+  assert.equal(config.launchTimeoutMs, 120000);
+  assert.deepEqual(config.allowGlobalToolPrefixes, ['ark_', 'prts_', 'input_']);
+  assert.equal(config.copilot.api, 'https://prts.maa.plus');
+
+  const clamped = normalizePresetConfig({
+    maxScreenshots: 500,
+    maxLogLines: 1,
+    launchTimeoutMs: 1,
+    allowGlobalToolPrefixes: ['ark_', 'ark_', ' prts_ ', ''],
+  });
+  assert.equal(clamped.maxScreenshots, 200);
+  assert.equal(clamped.maxLogLines, 10);
+  assert.equal(clamped.launchTimeoutMs, 10000);
+  assert.deepEqual(clamped.allowGlobalToolPrefixes, ['ark_', 'prts_']);
+
+  const empty = normalizePresetConfig({ allowGlobalToolPrefixes: [] });
+  assert.deepEqual(empty.allowGlobalToolPrefixes, ['ark_', 'prts_', 'input_'], '空数组回退默认白名单');
+});
+
+test('config: 路径补默认值（userDir → debug/asst.log、截图目录）', () => {
+  const paths = resolvePresetPaths(normalizePresetConfig({}));
+  assert.ok(paths.userDir.includes('dsh-arknights'));
+  assert.ok(paths.logFile.endsWith(path.join('debug', 'asst.log')));
+  assert.ok(paths.screenshotDir.includes('dsh-arknights'));
+  assert.ok(paths.copilotCacheDir.includes('copilot'));
+
+  const custom = resolvePresetPaths(normalizePresetConfig({ userDir: 'C:\\maa', logFile: 'D:\\x\\asst.log', screenshotDir: 'D:\\shots' }));
+  assert.equal(custom.logFile, 'D:\\x\\asst.log');
+  assert.equal(custom.screenshotDir, 'D:\\shots');
+});
+
+// ============================================================
+// 11. 工具名不相交
+// ============================================================
+
+test('preset/global/prts: 2 个预设工具与 13 全局 + 10 PRTS 互不重叠，并集 25 个', () => {
+  const presetNames = makeHarness().tools.map((tool) => tool.name);
+  assert.deepEqual(presetNames, PRESET_TOOL_NAMES);
+  assert.equal(GLOBAL_TOOL_NAMES.length, 13);
+  assert.equal(PRTS_TOOL_NAMES.length, 10);
+  const all = [...presetNames, ...GLOBAL_TOOL_NAMES, ...PRTS_TOOL_NAMES];
+  assert.equal(new Set(all).size, 25);
+  for (const name of presetNames) {
+    assert.equal(GLOBAL_TOOL_NAMES.includes(name), false, `${name} 不应同时出现在全局工具表`);
+    assert.equal(PRTS_TOOL_NAMES.includes(name), false, `${name} 不应同时出现在 PRTS 工具表`);
+  }
+  for (const name of ['ark_stages', 'ark_screen', 'ark_device', 'ark_game', 'ark_emulator', 'ark_log']) {
+    assert.equal(presetNames.includes(name), false, `旧预设工具 ${name} 应已被合并进 ark_diag`);
+  }
 });

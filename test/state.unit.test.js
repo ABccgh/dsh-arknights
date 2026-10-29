@@ -135,13 +135,20 @@ test('state: NotThreeStars 把星级压到 2（未知时记 0）', () => {
   assert.equal(three.getStars(), 2);
 });
 
-test('state: SanityBeforeStage 记录当前/最大理智', () => {
+test('state: SanityBeforeStage 记录当前/最大理智与时间', () => {
   const state = createState();
-  assert.deepEqual(state.snapshot().sanity, { current: null, max: null });
+  assert.deepEqual(state.snapshot().sanity, { current: null, max: null, at: null });
   state.pushEvent(whatEvent('SanityBeforeStage', { current_sanity: 100, max_sanity: 135 }));
-  assert.deepEqual(state.snapshot().sanity, { current: 100, max: 135 });
+  const sanity = state.snapshot().sanity;
+  assert.equal(sanity.current, 100);
+  assert.equal(sanity.max, 135);
+  assert.match(sanity.at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(state.getSanityAt(), sanity.at);
   state.pushEvent(whatEvent('SanityBeforeStage', { current_sanity: null, max_sanity: null }));
-  assert.deepEqual(state.snapshot().sanity, { current: null, max: null });
+  assert.deepEqual(
+    { current: state.snapshot().sanity.current, max: state.snapshot().sanity.max },
+    { current: null, max: null },
+  );
 });
 
 test('state: UnableToAgent 系列记录 branch', () => {
@@ -249,4 +256,151 @@ test('state: missingOperText 读取最近一次干员不匹配事件', () => {
   assert.equal(state.missingOperText(), '缺少干员：近卫。');
   state.pushEvent(whatEvent('BattleStartAll'));
   assert.equal(state.missingOperText(), '缺少干员：近卫。');
+});
+
+// ---------------------------------------------------------------------------
+// v2：环形缓冲 500 / run 快照 / 领域事件
+// ---------------------------------------------------------------------------
+
+test('state: 默认环形缓冲 500，状态 JSON 仍只带 10 条（无 details）', () => {
+  const state = createState();
+  for (let index = 1; index <= 520; index += 1) state.pushEvent({ code: 20003, seq: index, details: { what: 'StageDrops' } });
+  assert.equal(state.recentEvents(1000).length, 500);
+  assert.equal(state.recentEvents().length, 10);
+  assert.equal(state.getLastSeq(), 520);
+  const snapshot = state.snapshot();
+  assert.equal(snapshot.events.length, 10);
+  assert.equal('details' in snapshot.events[0], false);
+});
+
+test('state: setRun({run,lastRun}) 并入 snapshot（去掉大数组、截断 text）', () => {
+  const state = createState();
+  assert.equal(state.snapshot().run, null);
+  assert.equal(state.snapshot().lastRun, null);
+
+  state.setRun({
+    run: {
+      id: 'run-1',
+      kind: 'fight',
+      status: 'running',
+      startedAt: '2026-10-29T00:00:00.000Z',
+      planned: [{ stage: '5-10' }],
+      executed: [{ stage: '5-10' }],
+      events: [{ seq: 1 }],
+      params: { big: true },
+      text: 'x'.repeat(600),
+      signal: { aborted: false },
+      update: () => {},
+    },
+  });
+  const snapshot = state.snapshot();
+  assert.equal(snapshot.run.id, 'run-1');
+  assert.equal(snapshot.run.status, 'running');
+  assert.equal('planned' in snapshot.run, false);
+  assert.equal('executed' in snapshot.run, false);
+  assert.equal('events' in snapshot.run, false);
+  assert.equal('params' in snapshot.run, false);
+  assert.equal('signal' in snapshot.run, false);
+  assert.equal(snapshot.run.text.length, 501);
+  assert.equal(snapshot.lastRun, null);
+  assert.deepEqual(state.getRun(), snapshot.run);
+
+  state.setRun({ lastRun: { id: 'run-0', kind: 'daily', status: 'completed', endedAt: '2026-10-29T01:00:00.000Z' } });
+  assert.equal(state.getLastRun().id, 'run-0');
+  assert.equal(state.snapshot().run.id, 'run-1', '只更新传入的字段');
+
+  // snapshot 是副本
+  const copy = state.snapshot();
+  copy.run.id = 'hacked';
+  assert.equal(state.getRun().id, 'run-1');
+
+  assert.deepEqual(state.setRun(null), { run: null, lastRun: null });
+  assert.equal(state.snapshot().run, null);
+  assert.equal(state.snapshot().lastRun, null);
+});
+
+test('state: 领域事件归一化（recruit / infrast / depot / operbox / copilot）', () => {
+  const state = createState();
+
+  state.pushEvent(whatEvent('RecruitTagsDetected', { tags: ['先锋', '近战位'] }));
+  assert.deepEqual(state.snapshot().recruit.tags, ['先锋', '近战位']);
+  state.pushEvent(whatEvent('RecruitResult', { tags: ['先锋'], level: 5, opers: ['德克萨斯'] }));
+  assert.equal(state.snapshot().recruit.result.level, 5);
+  assert.deepEqual(state.snapshot().recruit.result.opers, ['德克萨斯']);
+  state.pushEvent(whatEvent('RecruitTagsRefreshed'));
+  state.pushEvent(whatEvent('RecruitTagsRefreshed'));
+  assert.equal(state.snapshot().recruit.refreshCount, 2);
+  assert.equal(state.snapshot().recruit.noPermit, false);
+  state.pushEvent(whatEvent('RecruitNoPermit'));
+  assert.equal(state.snapshot().recruit.noPermit, true);
+
+  state.pushEvent(whatEvent('EnterFacility', { facility: 'Mfg' }));
+  assert.equal(state.snapshot().infrast.facility, 'Mfg');
+  state.pushEvent(whatEvent('ProductOfFacility', { facility: 'Trade', product: '赤金', count: 5 }));
+  assert.equal(state.snapshot().infrast.product.product, '赤金');
+  state.pushEvent(whatEvent('NotEnoughStaff'));
+  assert.equal(state.snapshot().infrast.notEnoughStaff, true);
+
+  state.pushEvent(whatEvent('DepotInfo', { done: true, data: JSON.stringify({ 30061: 12, 30062: 3 }) }));
+  assert.equal(state.snapshot().depot.total, 2);
+
+  state.pushEvent(whatEvent('OperBoxInfo', {
+    done: true,
+    all_opers: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+    own_opers: [{ id: 'a' }, { id: 'b' }],
+  }));
+  assert.equal(state.snapshot().operbox.operators, 2);
+
+  state.pushEvent(whatEvent('CopilotPrecheckFile', { file: 'C:\\\\x\\\\copilot.json' }));
+  assert.equal(state.snapshot().copilot.precheck.file, 'C:\\\\x\\\\copilot.json');
+});
+
+test('state: 领域事件归一化（stage / routing / connection / chainExtra / AllTasksCompleted）', () => {
+  const state = createState();
+  state.pushEvent(whatEvent('StageInfo', { code: '5-10', name: '坍塌' }));
+  assert.equal(state.snapshot().stage.info.code, '5-10');
+  state.pushEvent(whatEvent('UnsupportedLevel', { level: 'XX-1' }));
+  assert.equal(state.snapshot().stage.unsupported.level, 'XX-1');
+  state.pushEvent(whatEvent('StageQueueStageNotFound', { stage: '5-99' }));
+  assert.equal(state.snapshot().stage.notFound.stage, '5-99');
+
+  state.pushEvent(whatEvent('RoutingRestart'));
+  state.pushEvent(whatEvent('RoutingRestart'));
+  assert.equal(state.snapshot().routingRestart, 2);
+
+  state.pushEvent({ code: 2, name: 'ConnectionInfo', details: { what: 'ConnectSuccess' } });
+  assert.equal(state.snapshot().connection.what, 'ConnectSuccess');
+
+  state.pushEvent({ code: 10003, name: 'TaskChainExtraInfo', details: { taskchain: 'Fight', what: 'Extra' } });
+  assert.equal(state.snapshot().chainExtra.length, 1);
+  assert.equal(state.snapshot().chainExtra[0].task, 'Fight');
+  assert.equal(state.snapshot().chainExtra[0].what, 'Extra');
+
+  state.pushEvent({ code: 3, name: 'AllTasksCompleted', details: { taskchain: 'Fight' } });
+  assert.equal(state.snapshot().allTasksCompleted.task, 'Fight');
+  assert.equal(state.snapshot().tasks.running, false);
+});
+
+test('state: resetChain 清本轮派生（含 copilot/stage/routingRestart），保留周期快照', () => {
+  const state = createState();
+  state.pushEvent(whatEvent('RecruitTagsDetected', { tags: ['先锋'] }));
+  state.pushEvent(whatEvent('DepotInfo', { done: true, data: '{"1":2}' }));
+  state.pushEvent(whatEvent('CopilotPrecheckFile', { file: 'x.json' }));
+  state.pushEvent(whatEvent('UnsupportedLevel', { level: 'XX' }));
+  state.pushEvent(whatEvent('RoutingRestart'));
+  state.pushEvent(chainEvent(10001, 'Fight'));
+  state.resetChain();
+
+  const snapshot = state.snapshot();
+  assert.deepEqual(snapshot.recruit.tags, ['先锋']);
+  assert.equal(snapshot.depot.total, 1);
+  assert.equal(snapshot.copilot.precheck, null);
+  assert.equal(snapshot.stage.unsupported, null);
+  assert.equal(snapshot.routingRestart, 0);
+  assert.deepEqual(snapshot.chainExtra, []);
+  assert.equal(snapshot.tasks.running, false);
+  // run 快照不会被 resetChain 清掉
+  state.setRun({ run: { id: 'run-1', kind: 'fight' } });
+  state.resetChain();
+  assert.equal(state.snapshot().run.id, 'run-1');
 });

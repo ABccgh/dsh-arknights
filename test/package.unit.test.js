@@ -89,7 +89,7 @@ test('package: exports 映射齐全（主入口/client/locale/icon/package.json�
 
 test('package: files 覆盖将要发布的全部文件', async () => {
   const pkg = await readJson('package.json');
-  for (const pattern of ['lib/**/*.js', 'lib/sidecar/*.py', 'client.js', 'locale/*.json', 'icon.svg', 'cordis.patch.yml', 'README.md', 'docs/*.md']) {
+  for (const pattern of ['lib/**/*.js', 'lib/sidecar/*.py', 'client.js', 'locale/*.json', 'icon.svg', 'cordis.patch.yml', 'README.md', 'docs/*.md', 'skill/**']) {
     assert.ok(pkg.files.includes(pattern), `files 缺 ${pattern}`);
   }
 });
@@ -156,7 +156,7 @@ test('package: cordis.patch.yml 的 id/name/config 与实现一致', async () =>
 test('package: PLUGIN_VERSION 与 package.json 一致，PROTOCOL_VERSION 与契约一致', async () => {
   const pkg = await readJson('package.json');
   assert.equal(PLUGIN_VERSION, pkg.version);
-  assert.equal(PROTOCOL_VERSION, '1.0.0');
+  assert.equal(PROTOCOL_VERSION, '2.0.0');
   const contracts = await readText('docs/contracts.md');
   assert.ok(contracts.includes(PROTOCOL_VERSION), 'docs/contracts.md 里的协议版本应与 PROTOCOL_VERSION 一致');
 });
